@@ -17,23 +17,29 @@ Perfect for coding from an iPad, phone, or any device with a browser.
 
 ### Prerequisites
 
-- Linux server (Ubuntu recommended)
-- Docker & Docker Compose
-- GitHub CLI (`gh`) authenticated
+- Fresh Ubuntu server (22.04+ recommended)
 - Domain managed by Cloudflare
+- That's it! The installer handles everything else.
 
 ### Install
 
 ```bash
-git clone https://github.com/gethomeport/homeport.git
+# Download and run (works on fresh Ubuntu)
+curl -fsSL https://raw.githubusercontent.com/ryanmish/homeport/main/scripts/install.sh | bash
+```
+
+Or clone first:
+```bash
+git clone https://github.com/ryanmish/homeport.git
 cd homeport
 ./scripts/install.sh
 ```
 
-The install script will:
-1. Set up Cloudflare Tunnel
-2. Configure DNS
-3. Start all services
+The installer will:
+1. Install Docker, GitHub CLI, cloudflared
+2. Authenticate with GitHub and Cloudflare
+3. Create and configure your tunnel
+4. Build and start all services
 
 ### Access
 
