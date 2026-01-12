@@ -258,8 +258,9 @@ func (s *Server) handleGitHubSearch(w http.ResponseWriter, r *http.Request) {
 // Share endpoints
 
 type ShareRequest struct {
-	Mode     string `json:"mode"`     // "private", "password", "public"
-	Password string `json:"password"` // required if mode is "password"
+	Mode      string `json:"mode"`       // "private", "password", "public"
+	Password  string `json:"password"`   // required if mode is "password"
+	ExpiresIn string `json:"expires_in"` // optional: "1h", "24h", "7d", "30d", or empty for never
 }
 
 func (s *Server) handleSharePort(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +300,33 @@ func (s *Server) handleSharePort(w http.ResponseWriter, r *http.Request) {
 		passwordHash = string(hash)
 	}
 
-	if err := s.store.UpdatePortShare(port, req.Mode, passwordHash); err != nil {
+	// Parse expiration
+	var expiresAt *time.Time
+	if req.ExpiresIn != "" {
+		var duration time.Duration
+		switch req.ExpiresIn {
+		case "1h":
+			duration = time.Hour
+		case "24h":
+			duration = 24 * time.Hour
+		case "7d":
+			duration = 7 * 24 * time.Hour
+		case "30d":
+			duration = 30 * 24 * time.Hour
+		default:
+			// Try parsing as a Go duration
+			d, err := time.ParseDuration(req.ExpiresIn)
+			if err != nil {
+				errorResponse(w, http.StatusBadRequest, "invalid expires_in: use '1h', '24h', '7d', '30d', or a valid Go duration")
+				return
+			}
+			duration = d
+		}
+		t := time.Now().Add(duration)
+		expiresAt = &t
+	}
+
+	if err := s.store.UpdatePortShare(port, req.Mode, passwordHash, expiresAt); err != nil {
 		errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -307,11 +334,16 @@ func (s *Server) handleSharePort(w http.ResponseWriter, r *http.Request) {
 	// Return the shareable URL
 	url := s.cfg.ExternalURL + "/" + portStr
 
-	jsonResponse(w, http.StatusOK, map[string]string{
+	resp := map[string]interface{}{
 		"status": "shared",
 		"mode":   req.Mode,
 		"url":    url,
-	})
+	}
+	if expiresAt != nil {
+		resp["expires_at"] = expiresAt.Format(time.RFC3339)
+	}
+
+	jsonResponse(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleUnsharePort(w http.ResponseWriter, r *http.Request) {
@@ -323,7 +355,7 @@ func (s *Server) handleUnsharePort(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reset to private (default)
-	if err := s.store.UpdatePortShare(port, "private", ""); err != nil {
+	if err := s.store.UpdatePortShare(port, "private", "", nil); err != nil {
 		errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}

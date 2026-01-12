@@ -34,6 +34,13 @@ func (s *Server) portAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// Check if share has expired (treat as private if expired)
+		if portInfo.ExpiresAt != nil && time.Now().After(*portInfo.ExpiresAt) {
+			// Share expired - reset to private
+			_ = s.store.UpdatePortShare(port, "private", "", nil)
+			portInfo.ShareMode = "private"
+		}
+
 		// Check sharing mode
 		switch portInfo.ShareMode {
 		case "public":

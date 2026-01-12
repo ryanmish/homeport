@@ -20,6 +20,7 @@ type Port struct {
 	ProcessName  string     `json:"process_name,omitempty"`
 	ShareMode    string     `json:"share_mode"` // "private", "password", "public"
 	PasswordHash string     `json:"-"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 	FirstSeen    time.Time  `json:"first_seen"`
 	LastSeen     time.Time  `json:"last_seen"`
 }

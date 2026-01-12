@@ -18,6 +18,7 @@ export interface Port {
   pid?: number
   process_name?: string
   share_mode: 'private' | 'password' | 'public'
+  expires_at?: string
   first_seen: string
   last_seen: string
 }
@@ -96,12 +97,15 @@ export const api = {
   getGitHubStatus: () =>
     fetchJSON<{ authenticated: boolean }>('/github/status'),
 
-  sharePort: (port: number, mode: string, password?: string) =>
-    fetchJSON<{ status: string; mode: string; url: string }>(`/share/${port}`, {
+  sharePort: (port: number, mode: string, password?: string, expiresIn?: string) =>
+    fetchJSON<{ status: string; mode: string; url: string; expires_at?: string }>(`/share/${port}`, {
       method: 'POST',
-      body: JSON.stringify({ mode, password }),
+      body: JSON.stringify({ mode, password, expires_in: expiresIn }),
     }),
 
   unsharePort: (port: number) =>
     fetchJSON<{ status: string }>(`/share/${port}`, { method: 'DELETE' }),
+
+  searchGitHubRepos: (query: string, limit = 20) =>
+    fetchJSON<GitHubRepo[]>(`/github/search?q=${encodeURIComponent(query)}&limit=${limit}`),
 }

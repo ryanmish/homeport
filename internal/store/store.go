@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -47,9 +48,12 @@ func (s *Store) migrate() error {
 			process_name TEXT,
 			share_mode TEXT DEFAULT 'private',
 			password_hash TEXT,
+			expires_at TIMESTAMP,
 			first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+		// Migration: add expires_at column if it doesn't exist
+		`ALTER TABLE ports ADD COLUMN expires_at TIMESTAMP`,
 		`CREATE TABLE IF NOT EXISTS access_logs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			port INTEGER,
@@ -61,12 +65,22 @@ func (s *Store) migrate() error {
 	}
 
 	for _, m := range migrations {
-		if _, err := s.db.Exec(m); err != nil {
+		_, err := s.db.Exec(m)
+		// Ignore "duplicate column" errors from ALTER TABLE migrations
+		if err != nil && !isDuplicateColumnError(err) {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func isDuplicateColumnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate column") || strings.Contains(msg, "already exists")
 }
 
 // Repo operations
@@ -156,10 +170,11 @@ func (s *Store) GetPort(port int) (*Port, error) {
 	var pid sql.NullInt64
 	var processName sql.NullString
 	var passwordHash sql.NullString
+	var expiresAt sql.NullTime
 	err := s.db.QueryRow(`
-		SELECT port, repo_id, pid, process_name, share_mode, password_hash, first_seen, last_seen
+		SELECT port, repo_id, pid, process_name, share_mode, password_hash, expires_at, first_seen, last_seen
 		FROM ports WHERE port = ?
-	`, port).Scan(&p.Port, &repoID, &pid, &processName, &p.ShareMode, &passwordHash, &p.FirstSeen, &p.LastSeen)
+	`, port).Scan(&p.Port, &repoID, &pid, &processName, &p.ShareMode, &passwordHash, &expiresAt, &p.FirstSeen, &p.LastSeen)
 	if err != nil {
 		return nil, err
 	}
@@ -167,12 +182,15 @@ func (s *Store) GetPort(port int) (*Port, error) {
 	p.PID = int(pid.Int64)
 	p.ProcessName = processName.String
 	p.PasswordHash = passwordHash.String
+	if expiresAt.Valid {
+		p.ExpiresAt = &expiresAt.Time
+	}
 	return &p, nil
 }
 
 func (s *Store) ListPorts() ([]Port, error) {
 	rows, err := s.db.Query(`
-		SELECT p.port, p.repo_id, r.name, p.pid, p.process_name, p.share_mode, p.first_seen, p.last_seen
+		SELECT p.port, p.repo_id, r.name, p.pid, p.process_name, p.share_mode, p.expires_at, p.first_seen, p.last_seen
 		FROM ports p
 		LEFT JOIN repos r ON p.repo_id = r.id
 		ORDER BY p.port
@@ -187,20 +205,24 @@ func (s *Store) ListPorts() ([]Port, error) {
 		var p Port
 		var repoID, repoName, processName sql.NullString
 		var pid sql.NullInt64
-		if err := rows.Scan(&p.Port, &repoID, &repoName, &pid, &processName, &p.ShareMode, &p.FirstSeen, &p.LastSeen); err != nil {
+		var expiresAt sql.NullTime
+		if err := rows.Scan(&p.Port, &repoID, &repoName, &pid, &processName, &p.ShareMode, &expiresAt, &p.FirstSeen, &p.LastSeen); err != nil {
 			return nil, err
 		}
 		p.RepoID = repoID.String
 		p.RepoName = repoName.String
 		p.PID = int(pid.Int64)
 		p.ProcessName = processName.String
+		if expiresAt.Valid {
+			p.ExpiresAt = &expiresAt.Time
+		}
 		ports = append(ports, p)
 	}
 	return ports, nil
 }
 
-func (s *Store) UpdatePortShare(port int, mode string, passwordHash string) error {
-	_, err := s.db.Exec(`UPDATE ports SET share_mode = ?, password_hash = ? WHERE port = ?`, mode, passwordHash, port)
+func (s *Store) UpdatePortShare(port int, mode string, passwordHash string, expiresAt *time.Time) error {
+	_, err := s.db.Exec(`UPDATE ports SET share_mode = ?, password_hash = ?, expires_at = ? WHERE port = ?`, mode, passwordHash, expiresAt, port)
 	return err
 }
 
