@@ -24,8 +24,8 @@ Perfect for coding from an iPad, phone, or any device with a browser.
 ### Install
 
 ```bash
-# Download and run (works on fresh Ubuntu)
-curl -fsSL https://raw.githubusercontent.com/ryanmish/homeport/main/scripts/install.sh | bash
+# One-liner install (works on fresh Ubuntu)
+curl -fsSL https://raw.githubusercontent.com/ryanmish/homeport/main/scripts/bootstrap.sh | bash
 ```
 
 Or clone first:

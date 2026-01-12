@@ -248,11 +248,48 @@ echo "Starting services..."
 $COMPOSE up -d
 echo -e "${GREEN}✓${NC} Services started"
 
+# Install systemd service for auto-start on boot
+echo "Setting up auto-start on boot..."
+
+# Create systemd service for homeport
+sudo tee /etc/systemd/system/homeport.service > /dev/null << EOF
+[Unit]
+Description=Homeport Development Environment
+Documentation=https://github.com/ryanmish/homeport
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=$USER
+WorkingDirectory=$HOMEPORT_DIR/docker
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+ExecReload=/usr/bin/docker compose restart
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable homeport.service
+echo -e "${GREEN}✓${NC} Homeport will start on boot"
+
 # Start cloudflared tunnel
 echo "Starting Cloudflare Tunnel..."
 sudo cloudflared service install 2>/dev/null || true
+sudo systemctl enable cloudflared 2>/dev/null || true
 sudo systemctl start cloudflared 2>/dev/null || cloudflared tunnel run "$TUNNEL_NAME" &
-echo -e "${GREEN}✓${NC} Tunnel running"
+echo -e "${GREEN}✓${NC} Tunnel running (will auto-start on boot)"
+
+# Install CLI
+echo "Installing homeport CLI..."
+sudo cp "$HOMEPORT_DIR/scripts/homeport-cli.sh" /usr/local/bin/homeport
+sudo chmod +x /usr/local/bin/homeport
+echo -e "${GREEN}✓${NC} CLI installed (run 'homeport' from anywhere)"
 
 echo ""
 echo -e "${GREEN}=========================================="
