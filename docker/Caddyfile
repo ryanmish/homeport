@@ -1,0 +1,34 @@
+# Homeport Caddyfile
+# Routes traffic to homeportd and code-server
+#
+# When using Cloudflare Tunnel, Caddy handles local routing only.
+# Cloudflare handles TLS termination.
+
+{
+	# Disable HTTPS since Cloudflare Tunnel handles TLS
+	auto_https off
+
+	# Admin endpoint (optional, for debugging)
+	admin off
+}
+
+# Main site
+:80 {
+	# Logging
+	log {
+		output stdout
+		format console
+	}
+
+	# Code Server
+	# Access at /code/
+	handle_path /code/* {
+		reverse_proxy localhost:8443
+	}
+
+	# Homeport API and UI
+	# Everything else goes to homeportd
+	handle {
+		reverse_proxy localhost:8080
+	}
+}

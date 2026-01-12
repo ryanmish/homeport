@@ -1,0 +1,41 @@
+# Binaries
+homeportd
+homeport
+*.exe
+bin/
+
+# Build artifacts
+dist/
+
+# Data directories
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# UI build output (committed separately)
+# ui/dist/
+
+# Node modules
+ui/node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+docker/.env
+
+# Logs
+*.log
+
+# Cloudflare credentials (sensitive)
+.cloudflared/

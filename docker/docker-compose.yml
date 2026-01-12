@@ -1,0 +1,68 @@
+version: "3.8"
+
+services:
+  # Homeport Daemon
+  # Uses network_mode: host to access localhost ports (Linux only)
+  homeportd:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: homeportd
+    network_mode: host
+    volumes:
+      - homeport-data:/srv/homeport/data
+      - repos:/srv/homeport/repos
+      # Mount gh CLI config for GitHub integration
+      - ${HOME}/.config/gh:/home/homeport/.config/gh:ro
+    environment:
+      - HOMEPORT_EXTERNAL_URL=${EXTERNAL_URL:-http://localhost}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/status"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # Code Server (browser-based VS Code)
+  code-server:
+    image: codercom/code-server:latest
+    container_name: code-server
+    network_mode: host
+    volumes:
+      - repos:/home/coder/repos
+      - code-server-data:/home/coder/.local/share/code-server
+      - code-server-config:/home/coder/.config/code-server
+    environment:
+      - PASSWORD=${CODE_SERVER_PASSWORD:-}
+      - DOCKER_USER=coder
+    command:
+      - --bind-addr=127.0.0.1:8443
+      - --auth=${CODE_SERVER_AUTH:-none}
+      - --disable-telemetry
+      - /home/coder/repos
+    restart: unless-stopped
+
+  # Caddy Reverse Proxy
+  # Handles TLS and routes traffic to services
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    restart: unless-stopped
+    depends_on:
+      - homeportd
+      - code-server
+
+volumes:
+  homeport-data:
+  repos:
+  code-server-data:
+  code-server-config:
+  caddy-data:
+  caddy-config:

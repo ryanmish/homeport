@@ -1,0 +1,27 @@
+# Homeport Configuration
+# This is the default config for Docker deployment
+
+# Where to store data (SQLite database, etc)
+data_dir: /srv/homeport/data
+
+# Where to clone repositories
+repos_dir: /srv/homeport/repos
+
+# Where the built UI files are
+ui_dir: /srv/homeport/ui
+
+# Port range to scan for dev servers
+port_range_min: 3000
+port_range_max: 9999
+
+# How often to scan for ports (seconds)
+scan_interval: 5
+
+# Server listen address
+listen_addr: ":8080"
+
+# External URL (set via environment variable or Cloudflare Tunnel)
+# external_url: "https://dev.example.com"
+
+# Dev mode (false in Docker)
+dev_mode: false
