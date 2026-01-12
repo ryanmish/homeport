@@ -2,10 +2,12 @@ package share
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,8 +15,21 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Secret key for signing cookies (in production, load from config)
-var cookieSecret = []byte("homeport-dev-secret-change-in-production")
+// cookieSecret is used to sign auth cookies
+var cookieSecret []byte
+
+func init() {
+	// Load from environment or generate random secret
+	if secret := os.Getenv("HOMEPORT_COOKIE_SECRET"); secret != "" {
+		cookieSecret = []byte(secret)
+	} else {
+		// Generate random 32-byte secret for this session
+		cookieSecret = make([]byte, 32)
+		if _, err := rand.Read(cookieSecret); err != nil {
+			panic("failed to generate cookie secret: " + err.Error())
+		}
+	}
+}
 
 // VerifyPassword checks if the provided password matches the hash
 func VerifyPassword(password, hash string) bool {
