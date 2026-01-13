@@ -75,10 +75,12 @@ echo ""
 echo -e "${BLUE}[T-5] Fueling engines: Docker${NC}"
 echo "==========================================="
 
+DOCKER_JUST_INSTALLED=false
 if command -v docker &> /dev/null; then
     echo -e "${GREEN}[*]${NC} Docker already installed ($(docker --version | cut -d' ' -f3 | tr -d ','))"
 else
     echo "Installing Docker..."
+    DOCKER_JUST_INSTALLED=true
 
     # Add Docker's official GPG key
     sudo install -m 0755 -d /etc/apt/keyrings
@@ -99,7 +101,6 @@ else
     sudo usermod -aG docker $USER
 
     echo -e "${GREEN}[*]${NC} Docker installed"
-    echo -e "${YELLOW}Note: You may need to log out and back in for docker group to take effect.${NC}"
 fi
 echo ""
 
@@ -309,17 +310,24 @@ echo "Building Docker images (this may take a few minutes)..."
 cd "$HOMEPORT_DIR/docker"
 
 # Use docker compose (v2) or docker-compose (v1)
-if docker compose version &> /dev/null; then
+if docker compose version &> /dev/null 2>&1 || sg docker -c "docker compose version" &> /dev/null 2>&1; then
     COMPOSE="docker compose"
 else
     COMPOSE="docker-compose"
 fi
 
-$COMPOSE build --quiet
-echo -e "${GREEN}[*]${NC} Docker images built"
-
-echo "Starting services..."
-$COMPOSE up -d
+# If Docker was just installed, use sg to run with docker group
+if [ "$DOCKER_JUST_INSTALLED" = true ]; then
+    sg docker -c "$COMPOSE build --quiet"
+    echo -e "${GREEN}[*]${NC} Docker images built"
+    echo "Starting services..."
+    sg docker -c "$COMPOSE up -d"
+else
+    $COMPOSE build --quiet
+    echo -e "${GREEN}[*]${NC} Docker images built"
+    echo "Starting services..."
+    $COMPOSE up -d
+fi
 echo -e "${GREEN}[*]${NC} Services started"
 
 # Install systemd service for auto-start on boot

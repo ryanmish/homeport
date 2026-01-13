@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # Homeport Daemon
   # Uses network_mode: host to access localhost ports (Linux only)
