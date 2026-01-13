@@ -131,7 +131,8 @@ else
     echo -e "${YELLOW}GitHub CLI needs to be authenticated.${NC}"
     echo "This allows Homeport to clone your repositories."
     echo ""
-    gh auth login
+    # Auto-skip the "Press Enter to open browser" prompt (it won't open on headless servers anyway)
+    echo | gh auth login -p https -h github.com -w
     echo -e "${GREEN}[*]${NC} GitHub CLI authenticated"
 fi
 
