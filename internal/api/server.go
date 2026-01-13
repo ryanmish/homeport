@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -252,20 +253,28 @@ func (s *Server) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) {
 	// Get the path after /code
 	path := strings.TrimPrefix(r.URL.Path, "/code")
 
-	// If requesting the root without query params, serve the wrapper page
-	// The iframe will request with ?folder= which bypasses the wrapper
-	if (path == "" || path == "/") && r.URL.RawQuery == "" {
+	// If requesting the root (with or without query params), serve the wrapper page
+	// The wrapper iframe will use ?_wrapped=1 to indicate it's the inner iframe
+	if (path == "" || path == "/") && r.URL.Query().Get("_wrapped") != "1" {
 		s.serveCodeServerWrapper(w, r)
 		return
 	}
 
-	// Otherwise proxy to code-server
+	// Otherwise proxy to code-server (removes _wrapped param if present)
 	proxy.HandlerWithBase(8443, "/code").ServeHTTP(w, r)
 }
 
 // serveCodeServerWrapper serves an HTML page that wraps code-server with a nav header
 func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) {
-	wrapper := `<!DOCTYPE html>
+	// Build iframe URL preserving query params but adding _wrapped=1
+	iframeSrc := "/code/?_wrapped=1"
+	if folder := r.URL.Query().Get("folder"); folder != "" {
+		iframeSrc += "&folder=" + folder
+	} else {
+		iframeSrc += "&folder=/home/coder/repos"
+	}
+
+	wrapper := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -273,7 +282,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
     <title>VS Code - Homeport</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { height: 100%; overflow: hidden; }
+        html, body { height: 100%%; overflow: hidden; }
         .homeport-nav {
             height: 36px;
             background: #1e1e1e;
@@ -311,8 +320,8 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             height: 14px;
         }
         iframe {
-            width: 100%;
-            height: calc(100% - 36px);
+            width: 100%%;
+            height: calc(100%% - 36px);
             border: none;
         }
     </style>
@@ -329,9 +338,9 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         <span class="sep">/</span>
         <span style="color: #ccc;">VS Code</span>
     </nav>
-    <iframe src="/code/?folder=/home/coder/repos" allow="clipboard-read; clipboard-write"></iframe>
+    <iframe src="%s" allow="clipboard-read; clipboard-write"></iframe>
 </body>
-</html>`
+</html>`, iframeSrc)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(wrapper))
 }
