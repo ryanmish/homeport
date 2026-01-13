@@ -307,19 +307,41 @@ if [ -z "$USER_EMAIL" ] || [ "$USER_EMAIL" = "null" ]; then
 fi
 
 if [ -n "$USER_EMAIL" ]; then
-    echo -e "Detected email: ${BOLD}$USER_EMAIL${NC}"
+    echo -e "Your email: ${BOLD}$USER_EMAIL${NC} (from GitHub)"
 else
     read -p "Enter your email: " USER_EMAIL
 fi
 
 echo ""
-echo "Create an API token with these permissions:"
-echo "  Account: Access Apps/Policies (Edit), Account Settings (Read)"
-echo "  Zone: Zone (Read), DNS (Edit)"
+echo "Opening Cloudflare to create an API token..."
 echo ""
-echo -e "${BOLD}Quick link:${NC} https://dash.cloudflare.com/profile/api-tokens"
+echo -e "${BOLD}Follow these steps:${NC}"
+echo "  1. Click 'Create Token'"
+echo "  2. Click 'Create Custom Token' at the bottom"
+echo "  3. Name it: Homeport"
+echo "  4. Add these permissions:"
+echo "     Account | Access: Apps and Policies | Edit"
+echo "     Account | Account Settings | Read"
+echo "     Zone | Zone | Read"
+echo "     Zone | DNS | Edit"
+echo "  5. Click 'Continue to summary' → 'Create Token'"
+echo "  6. Copy the token"
 echo ""
-read -p "Paste your API token: " CF_API_TOKEN
+
+# Try to open browser, or show URL
+BROWSER_OPENED=false
+if command -v xdg-open &> /dev/null; then
+    xdg-open "https://dash.cloudflare.com/profile/api-tokens" 2>/dev/null && BROWSER_OPENED=true
+elif command -v open &> /dev/null; then
+    open "https://dash.cloudflare.com/profile/api-tokens" 2>/dev/null && BROWSER_OPENED=true
+fi
+
+if [ "$BROWSER_OPENED" = false ]; then
+    echo -e "Open this URL: ${BOLD}https://dash.cloudflare.com/profile/api-tokens${NC}"
+fi
+
+echo ""
+read -p "Paste your API token here (or Enter to skip): " CF_API_TOKEN
 
 if [ -n "$CF_API_TOKEN" ]; then
     if [ -z "$USER_EMAIL" ]; then
