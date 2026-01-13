@@ -84,14 +84,20 @@ EOF
     else
         echo "Installing Docker..."
 
+        # Determine distro for Docker repo (ubuntu or debian)
+        DOCKER_DISTRO="$ID"
+        if [[ "$ID" != "ubuntu" && "$ID" != "debian" ]]; then
+            DOCKER_DISTRO="ubuntu"  # Fallback for derivatives
+        fi
+
         # Add Docker's official GPG key
         sudo install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        curl -fsSL "https://download.docker.com/linux/${DOCKER_DISTRO}/gpg" | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
         sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
         # Add the repository
         echo \
-          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${DOCKER_DISTRO} \
           $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
           sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
@@ -133,8 +139,7 @@ EOF
         echo -e "${YELLOW}GitHub CLI needs to be authenticated.${NC}"
         echo "This allows Homeport to clone your repositories."
         echo ""
-        # Auto-skip the "Press Enter to open browser" prompt (it won't open on headless servers anyway)
-        echo | gh auth login -p https -h github.com -w
+        gh auth login -p https -h github.com -w
         echo -e "${GREEN}[*]${NC} GitHub CLI authenticated"
     fi
 
@@ -437,26 +442,35 @@ CFGEOF
     echo "Building Docker images (this may take a few minutes)..."
     cd "$HOMEPORT_DIR/docker"
 
-    # Check if user can access Docker directly
-    if docker info &> /dev/null; then
-        # User has docker access
-        if docker compose version &> /dev/null; then
-            COMPOSE="docker compose"
-        else
-            COMPOSE="docker-compose"
-        fi
-        $COMPOSE build --quiet
-        echo -e "${GREEN}[*]${NC} Docker images built"
-        echo "Starting services..."
-        $COMPOSE up -d
-    else
-        # User needs docker group - use sg to run with docker group
-        echo "Activating docker group..."
+    # Determine docker compose command
+    if docker compose version >/dev/null 2>&1; then
         COMPOSE="docker compose"
-        sg docker -c "$COMPOSE build --quiet"
-        echo -e "${GREEN}[*]${NC} Docker images built"
-        echo "Starting services..."
-        sg docker -c "$COMPOSE up -d"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        COMPOSE="docker-compose"
+    else
+        COMPOSE="docker compose"
+    fi
+
+    # Run docker commands - use sg if user was just added to docker group
+    run_docker() {
+        if docker info >/dev/null 2>&1; then
+            "$@"
+        else
+            # User was just added to docker group - use sg to run with that group
+            sg docker -c "$*"
+        fi
+    }
+
+    if ! run_docker $COMPOSE build; then
+        echo -e "${RED}Docker build failed.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}[*]${NC} Docker images built"
+
+    echo "Starting services..."
+    if ! run_docker $COMPOSE up -d; then
+        echo -e "${RED}Failed to start services.${NC}"
+        exit 1
     fi
     echo -e "${GREEN}[*]${NC} Services started"
 
