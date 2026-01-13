@@ -1056,7 +1056,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             isStarting = true;
             const btn = document.getElementById('startServerBtn');
             btn.disabled = true;
-            btn.innerHTML = '<span class="loading-spinner light"></span> Starting...';
+            btn.innerHTML = '<svg class="animate-spin" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Starting...';
 
             try {
                 const resp = await fetch('/api/repos', { credentials: 'include' });
@@ -1122,7 +1122,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             isStopping = true;
             const btn = document.getElementById('stopBtn');
             btn.disabled = true;
-            btn.innerHTML = '<span class="loading-spinner"></span> Stopping...';
+            btn.innerHTML = '<svg class="animate-spin" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Stopping...';
 
             try {
                 const resp = await fetch('/api/repos', { credentials: 'include' });
