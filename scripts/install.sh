@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Ensure we can read from terminal (important when script is piped)
+if [ ! -t 0 ]; then
+    exec < /dev/tty
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
