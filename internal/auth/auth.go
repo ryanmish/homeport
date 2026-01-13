@@ -369,7 +369,6 @@ func LoginPage(error string) string {
                 </svg>
             </div>
             <h1>Homeport</h1>
-            <p>Remote Development Environment</p>
         </div>
         %s
         <form method="POST" action="/login">
