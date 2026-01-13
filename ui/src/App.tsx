@@ -336,13 +336,38 @@ function App() {
     setProcessLoading(prev => ({ ...prev, [repo.id]: 'starting' }))
     try {
       await api.startProcess(repo.id)
-      toast.success(`Started ${repo.name}`)
-      // Immediate refresh + delayed refresh for port detection
-      await fetchData()
-      setTimeout(fetchData, 1500)
+      // Poll until port appears or timeout (10 seconds)
+      let attempts = 0
+      const pollForPort = async (): Promise<void> => {
+        attempts++
+        const portsData = await api.getPorts()
+        const hasPort = portsData.some(p => p.repo_id === repo.name || p.repo_id === repo.id)
+        if (hasPort) {
+          toast.success(`Started ${repo.name}`)
+          await fetchData()
+          setProcessLoading(prev => {
+            const next = { ...prev }
+            delete next[repo.id]
+            return next
+          })
+        } else if (attempts < 10) {
+          await new Promise(r => setTimeout(r, 1000))
+          return pollForPort()
+        } else {
+          // Timeout - still refresh and clear loading
+          toast.success(`Started ${repo.name}`)
+          await fetchData()
+          setProcessLoading(prev => {
+            const next = { ...prev }
+            delete next[repo.id]
+            return next
+          })
+        }
+      }
+      await new Promise(r => setTimeout(r, 500))
+      await pollForPort()
     } catch (err) {
       toast.error(`Failed to start: ${err}`)
-    } finally {
       setProcessLoading(prev => {
         const next = { ...prev }
         delete next[repo.id]
@@ -355,13 +380,38 @@ function App() {
     setProcessLoading(prev => ({ ...prev, [repo.id]: 'stopping' }))
     try {
       await api.stopProcess(repo.id)
-      toast.success(`Stopped ${repo.name}`)
-      // Immediate refresh + delayed refresh for port cleanup
-      await fetchData()
-      setTimeout(fetchData, 1500)
+      // Poll until port disappears or timeout (10 seconds)
+      let attempts = 0
+      const pollForStop = async (): Promise<void> => {
+        attempts++
+        const portsData = await api.getPorts()
+        const hasPort = portsData.some(p => p.repo_id === repo.name || p.repo_id === repo.id)
+        if (!hasPort) {
+          toast.success(`Stopped ${repo.name}`)
+          await fetchData()
+          setProcessLoading(prev => {
+            const next = { ...prev }
+            delete next[repo.id]
+            return next
+          })
+        } else if (attempts < 10) {
+          await new Promise(r => setTimeout(r, 1000))
+          return pollForStop()
+        } else {
+          // Timeout - still refresh and clear loading
+          toast.success(`Stopped ${repo.name}`)
+          await fetchData()
+          setProcessLoading(prev => {
+            const next = { ...prev }
+            delete next[repo.id]
+            return next
+          })
+        }
+      }
+      await new Promise(r => setTimeout(r, 500))
+      await pollForStop()
     } catch (err) {
       toast.error('Failed to stop')
-    } finally {
       setProcessLoading(prev => {
         const next = { ...prev }
         delete next[repo.id]

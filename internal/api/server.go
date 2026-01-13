@@ -305,7 +305,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 24px;
+            padding: 0 12px;
         }
 
         .header-left {
@@ -552,34 +552,40 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             margin-bottom: 8px;
         }
 
-        .share-mode-buttons {
+        .share-options {
             display: flex;
-            gap: 4px;
-            margin-bottom: 12px;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
         }
 
-        .share-mode-btn {
-            flex: 1;
-            padding: 8px 12px;
-            font-size: 13px;
-            font-weight: 500;
+        .share-option {
+            padding: 12px;
             border: 1px solid #e5e7eb;
-            background: #f9fafb;
-            color: #374151;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             transition: all 0.15s;
         }
 
-        .share-mode-btn:hover {
-            background: #f3f4f6;
-            border-color: #d1d5db;
+        .share-option:hover {
+            border-color: #3b82f6;
         }
 
-        .share-mode-btn.active {
-            background: #111827;
-            color: white;
-            border-color: #111827;
+        .share-option.active {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+
+        .share-option-title {
+            font-weight: 500;
+            font-size: 13px;
+            color: #111827;
+        }
+
+        .share-option-desc {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 2px;
         }
 
         .share-password-field {
@@ -996,6 +1002,20 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         let isStarting = false;
         let isStopping = false;
 
+        function resetStartButton() {
+            const btn = document.getElementById('startServerBtn');
+            isStarting = false;
+            btn.disabled = false;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Server';
+        }
+
+        function resetStopButton() {
+            const btn = document.getElementById('stopBtn');
+            isStopping = false;
+            btn.disabled = false;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg> Stop';
+        }
+
         async function startServer() {
             if (isStarting) return;
             isStarting = true;
@@ -1005,36 +1025,42 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
 
             try {
                 const resp = await fetch('/api/repos', { credentials: 'include' });
-                if (!resp.ok) { isStarting = false; return; }
+                if (!resp.ok) { resetStartButton(); return; }
                 const repos = await resp.json();
                 const repo = repos.find(r => r.name === REPO_NAME);
                 if (!repo) {
                     alert('Repository not found. Please configure a start command in the dashboard.');
-                    isStarting = false;
-                    btn.disabled = false;
-                    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Server';
+                    resetStartButton();
                     return;
                 }
                 if (!repo.start_command) {
                     alert('No start command configured. Please set one in the dashboard.');
-                    isStarting = false;
-                    btn.disabled = false;
-                    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Server';
+                    resetStartButton();
                     return;
                 }
                 await fetch('/api/processes/' + repo.id + '/start', {
                     method: 'POST',
                     credentials: 'include'
                 });
-                // Immediate check for port
-                setTimeout(checkPorts, 500);
-                setTimeout(checkPorts, 1500);
+                // Poll for port detection - keep loading until port appears or timeout
+                let attempts = 0;
+                const pollForPort = async () => {
+                    attempts++;
+                    await checkPorts();
+                    if (allPorts.length > 0) {
+                        // Port detected, checkPorts will show running controls
+                        isStarting = false;
+                    } else if (attempts < 10) {
+                        setTimeout(pollForPort, 1000);
+                    } else {
+                        // Timeout after 10 seconds
+                        resetStartButton();
+                    }
+                };
+                setTimeout(pollForPort, 500);
             } catch (e) {
                 console.error('Failed to start server:', e);
-            } finally {
-                isStarting = false;
-                btn.disabled = false;
-                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Server';
+                resetStartButton();
             }
         }
 
@@ -1047,7 +1073,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
 
             try {
                 const resp = await fetch('/api/repos', { credentials: 'include' });
-                if (!resp.ok) { isStopping = false; return; }
+                if (!resp.ok) { resetStopButton(); return; }
                 const repos = await resp.json();
                 const repo = repos.find(r => r.name === REPO_NAME);
                 if (repo) {
@@ -1055,16 +1081,26 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                         method: 'POST',
                         credentials: 'include'
                     });
-                    // Immediate check for port
-                    setTimeout(checkPorts, 500);
-                    setTimeout(checkPorts, 1500);
+                    // Poll until port disappears or timeout
+                    let attempts = 0;
+                    const pollForStop = async () => {
+                        attempts++;
+                        await checkPorts();
+                        if (allPorts.length === 0) {
+                            // Port gone, checkPorts will show start button
+                            isStopping = false;
+                        } else if (attempts < 10) {
+                            setTimeout(pollForStop, 1000);
+                        } else {
+                            // Timeout
+                            resetStopButton();
+                        }
+                    };
+                    setTimeout(pollForStop, 500);
                 }
             } catch (e) {
                 console.error('Failed to stop server:', e);
-            } finally {
-                isStopping = false;
-                btn.disabled = false;
-                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg> Stop';
+                resetStopButton();
             }
         }
 
@@ -1076,7 +1112,8 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         function showShareModal(port, currentMode) {
             if (shareDropdown) shareDropdown.remove();
             selectedMode = currentMode;
-            sharePassword = '';
+            // Retrieve saved password for this port if it exists
+            sharePassword = localStorage.getItem('homeport_share_pw_' + port) || '';
             showPassword = false;
 
             const dropdown = document.createElement('div');
@@ -1109,28 +1146,35 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
 
         function renderShareDropdown(port, currentMode) {
             return ` + "`" + `
-                <div class="share-dropdown-content">
-                    <div class="share-label">Sharing Mode</div>
-                    <div class="share-mode-buttons">
-                        <button class="share-mode-btn ${selectedMode === 'private' ? 'active' : ''}" onclick="selectShareMode('private', ${port})">Private</button>
-                        <button class="share-mode-btn ${selectedMode === 'password' ? 'active' : ''}" onclick="selectShareMode('password', ${port})">Password</button>
-                        <button class="share-mode-btn ${selectedMode === 'public' ? 'active' : ''}" onclick="selectShareMode('public', ${port})">Public</button>
+                <div class="share-dropdown-content" onclick="event.stopPropagation()">
+                    <div class="share-options">
+                        <div class="share-option ${selectedMode === 'private' ? 'active' : ''}" onclick="event.stopPropagation(); selectShareMode('private', ${port})">
+                            <div class="share-option-title">Private</div>
+                            <div class="share-option-desc">Only accessible when logged into Homeport</div>
+                        </div>
+                        <div class="share-option ${selectedMode === 'password' ? 'active' : ''}" onclick="event.stopPropagation(); selectShareMode('password', ${port})">
+                            <div class="share-option-title">Password</div>
+                            <div class="share-option-desc">Anyone with the password can access</div>
+                        </div>
+                        <div class="share-option ${selectedMode === 'public' ? 'active' : ''}" onclick="event.stopPropagation(); selectShareMode('public', ${port})">
+                            <div class="share-option-title">Public</div>
+                            <div class="share-option-desc">Anyone with the link can access</div>
+                        </div>
                     </div>
                     ${selectedMode === 'password' ? ` + "`" + `
                         <div class="share-password-field">
                             <div class="share-label">Password</div>
                             <div class="password-input-wrapper">
-                                <input type="${showPassword ? 'text' : 'password'}" id="sharePasswordInput" value="${sharePassword}" placeholder="Enter password..." oninput="sharePassword = this.value" />
-                                <button class="password-toggle" onclick="togglePasswordVisibility(${port})">
+                                <input type="${showPassword ? 'text' : 'password'}" id="sharePasswordInput" value="${sharePassword}" placeholder="Enter password..." oninput="event.stopPropagation(); sharePassword = this.value" onclick="event.stopPropagation()" />
+                                <button class="password-toggle" onclick="event.stopPropagation(); togglePasswordVisibility(${port})">
                                     ${showPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'}
                                 </button>
                             </div>
                         </div>
                     ` + "`" + ` : ''}
                     <div class="share-actions">
-                        <button class="share-action-btn cancel" onclick="shareDropdown.remove(); shareDropdown = null;">Cancel</button>
-                        <button class="share-action-btn copy" onclick="applyShareMode(${port}, true)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply & Copy URL</button>
-                        <button class="share-action-btn apply" onclick="applyShareMode(${port}, false)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply</button>
+                        <button class="share-action-btn cancel" onclick="event.stopPropagation(); shareDropdown.remove(); shareDropdown = null; document.removeEventListener('click', closeShareDropdown);">Cancel</button>
+                        <button class="share-action-btn apply" onclick="event.stopPropagation(); applyShareMode(${port}, false)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply</button>
                     </div>
                 </div>
             ` + "`" + `;
@@ -1167,6 +1211,11 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                 if (selectedMode === 'password') {
                     if (!sharePassword) return;
                     body.password = sharePassword;
+                    // Save password to localStorage so user can see it later
+                    localStorage.setItem('homeport_share_pw_' + port, sharePassword);
+                } else {
+                    // Clear saved password if switching away from password mode
+                    localStorage.removeItem('homeport_share_pw_' + port);
                 }
 
                 await fetch('/api/share/' + port, {
