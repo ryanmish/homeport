@@ -262,4 +262,14 @@ export const api = {
   // Activity log
   getActivity: (limit = 50) =>
     fetchJSON<ActivityEntry[]>(`/activity?limit=${limit}`),
+
+  // Auth
+  changePassword: (currentPassword: string, newPassword: string) =>
+    fetchJSON<{ status: string; message: string }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
+
+  logout: () =>
+    fetch('/logout', { method: 'GET', redirect: 'follow' }),
 }

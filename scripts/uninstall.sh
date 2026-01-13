@@ -27,7 +27,7 @@ echo ""
 echo "What will be removed:"
 echo "  - Docker containers, images, and volumes"
 echo "  - Systemd services (homeport + cloudflared)"
-echo "  - Cloudflare tunnel, DNS records, and Access apps"
+echo "  - Cloudflare tunnel and DNS records"
 echo "  - CLI command (/usr/local/bin/homeport)"
 echo "  - All config (~/.cloudflared, ~/.homeport)"
 echo ""
@@ -70,62 +70,7 @@ sudo cloudflared service uninstall 2>/dev/null || true
 pkill -9 cloudflared 2>/dev/null || true
 echo -e "${GREEN}[*]${NC} Tunnel service stopped"
 
-# Delete Cloudflare Access apps and DNS records if we have API token
-if [ -n "$CF_API_TOKEN" ] && [ -n "$ACCOUNT_ID" ]; then
-    echo "Removing Cloudflare Access applications..."
-
-    # Get all access apps and delete ones matching our domains
-    APPS=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps" \
-        -H "Authorization: Bearer $CF_API_TOKEN" \
-        -H "Content-Type: application/json" | jq -r '.result[] | @base64')
-
-    for APP in $APPS; do
-        APP_JSON=$(echo "$APP" | base64 -d)
-        APP_DOMAIN=$(echo "$APP_JSON" | jq -r '.domain // empty')
-        APP_ID=$(echo "$APP_JSON" | jq -r '.id')
-        APP_NAME=$(echo "$APP_JSON" | jq -r '.name')
-
-        # Delete if it matches our domains
-        if [ "$APP_DOMAIN" = "$DOMAIN" ] || [ "$APP_DOMAIN" = "$SSH_DOMAIN" ]; then
-            echo "  Deleting Access app: $APP_NAME"
-            curl -s -X DELETE "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps/$APP_ID" \
-                -H "Authorization: Bearer $CF_API_TOKEN" > /dev/null
-        fi
-    done
-    echo -e "${GREEN}[*]${NC} Access applications removed"
-
-    # Delete DNS records
-    echo "Removing DNS records..."
-
-    # Get zone ID from domain
-    BASE_DOMAIN=$(echo "$DOMAIN" | rev | cut -d'.' -f1,2 | rev)
-    ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$BASE_DOMAIN" \
-        -H "Authorization: Bearer $CF_API_TOKEN" \
-        -H "Content-Type: application/json" | jq -r '.result[0].id')
-
-    if [ -n "$ZONE_ID" ] && [ "$ZONE_ID" != "null" ]; then
-        # Find and delete CNAME records for our domains
-        for TARGET_DOMAIN in "$DOMAIN" "$SSH_DOMAIN"; do
-            if [ -n "$TARGET_DOMAIN" ]; then
-                RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$TARGET_DOMAIN&type=CNAME" \
-                    -H "Authorization: Bearer $CF_API_TOKEN" \
-                    -H "Content-Type: application/json" | jq -r '.result[0].id')
-
-                if [ -n "$RECORD_ID" ] && [ "$RECORD_ID" != "null" ]; then
-                    echo "  Deleting DNS record: $TARGET_DOMAIN"
-                    curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" \
-                        -H "Authorization: Bearer $CF_API_TOKEN" > /dev/null
-                fi
-            fi
-        done
-        echo -e "${GREEN}[*]${NC} DNS records removed"
-    else
-        echo -e "${YELLOW}[!]${NC} Could not find zone, DNS records may need manual deletion"
-    fi
-else
-    echo -e "${YELLOW}[!]${NC} No API token saved, skipping Access/DNS cleanup"
-    echo "    You may need to manually delete DNS records and Access apps"
-fi
+# Note: DNS records are managed by cloudflared and will be cleaned up when tunnel is deleted
 
 # Delete all tunnels
 echo "Destroying Cloudflare tunnels..."

@@ -15,6 +15,7 @@ services:
     environment:
       - HOMEPORT_EXTERNAL_URL=${EXTERNAL_URL:-http://localhost}
       - HOMEPORT_COOKIE_SECRET=${COOKIE_SECRET:-}
+      - HOMEPORT_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/status"]

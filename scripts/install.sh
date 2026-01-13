@@ -235,30 +235,10 @@ if [ -z "$DOMAIN" ]; then
     exit 1
 fi
 
-# SSH enabled by default with auto-generated subdomain
-BASE_DOMAIN=$(echo "$DOMAIN" | rev | cut -d'.' -f1,2 | rev)
-SSH_DOMAIN="ssh.${DOMAIN%%.*}.$BASE_DOMAIN"
-echo -e "${GREEN}[*]${NC} SSH access will be at: $SSH_DOMAIN"
-
-# Create tunnel config
+# Create tunnel config (HTTP only - SSH removed for security without CF Access)
 mkdir -p "$HOME/.cloudflared"
 
-if [ -n "$SSH_DOMAIN" ]; then
-    # Config with SSH
-    cat > "$HOME/.cloudflared/config.yml" << EOF
-tunnel: $TUNNEL_ID
-credentials-file: $HOME/.cloudflared/$TUNNEL_ID.json
-
-ingress:
-  - hostname: $SSH_DOMAIN
-    service: ssh://localhost:22
-  - hostname: $DOMAIN
-    service: http://localhost:80
-  - service: http_status:404
-EOF
-else
-    # Config without SSH
-    cat > "$HOME/.cloudflared/config.yml" << EOF
+cat > "$HOME/.cloudflared/config.yml" << EOF
 tunnel: $TUNNEL_ID
 credentials-file: $HOME/.cloudflared/$TUNNEL_ID.json
 
@@ -267,7 +247,6 @@ ingress:
     service: http://localhost:80
   - service: http_status:404
 EOF
-fi
 
 echo -e "${GREEN}[*]${NC} Tunnel config created"
 
@@ -283,176 +262,93 @@ else
     echo "    Add a CNAME record: $DOMAIN -> $TUNNEL_ID.cfargotunnel.com"
 fi
 
-if [ -n "$SSH_DOMAIN" ]; then
-    if cloudflared tunnel route dns "$TUNNEL_NAME" "$SSH_DOMAIN" 2>&1; then
-        echo -e "${GREEN}[*]${NC} DNS configured for $SSH_DOMAIN (SSH)"
-    else
-        echo -e "${YELLOW}[!]${NC} DNS route for $SSH_DOMAIN may need manual setup in Cloudflare dashboard"
-        echo "    Add a CNAME record: $SSH_DOMAIN -> $TUNNEL_ID.cfargotunnel.com"
-    fi
+# Set up password authentication
+echo ""
+echo -e "${BLUE}[T-1.5] Security shields: Password Authentication${NC}"
+echo "=================================================="
+echo ""
+echo -e "${BOLD}Set a password to protect your Homeport installation.${NC}"
+echo ""
+echo "Options:"
+echo "  1) Enter your own password"
+echo "  2) Generate a secure password (recommended)"
+echo ""
+read -p "Choose [1/2]: " PASSWORD_CHOICE
+
+# Get script directory early for building
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOMEPORT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Build homeportd first (needed for password hashing)
+echo "Preparing security module..."
+cd "$HOMEPORT_DIR"
+if ! command -v go &> /dev/null; then
+    # Install Go if not present
+    echo "Installing Go..."
+    GO_VERSION="1.21.5"
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" | sudo tar -C /usr/local -xzf -
+    export PATH=$PATH:/usr/local/go/bin
 fi
+go build -o /tmp/homeportd-setup ./cmd/homeportd 2>/dev/null
 
-# Set up Cloudflare Access for authentication
-echo ""
-echo -e "${BLUE}[T-1.5] Security shields: Cloudflare Access${NC}"
-echo "============================================="
-echo ""
-echo -e "${BOLD}Cloudflare Access protects your tunnel with authentication.${NC}"
-echo ""
+if [ "$PASSWORD_CHOICE" = "2" ]; then
+    # Generate password
+    GENERATED=$(/tmp/homeportd-setup generate-password)
+    ADMIN_PASSWORD=$(echo "$GENERATED" | head -1)
+    ADMIN_PASSWORD_HASH=$(echo "$GENERATED" | tail -1)
 
-# Auto-detect email from GitHub
-USER_EMAIL=$(gh api user -q .email 2>/dev/null || echo "")
-if [ -z "$USER_EMAIL" ] || [ "$USER_EMAIL" = "null" ]; then
-    USER_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
-fi
-
-if [ -n "$USER_EMAIL" ]; then
-    echo -e "Your email: ${BOLD}$USER_EMAIL${NC} (from GitHub)"
+    echo ""
+    echo -e "${GREEN}Generated password:${NC}"
+    echo ""
+    echo -e "  ${BOLD}$ADMIN_PASSWORD${NC}"
+    echo ""
+    echo -e "${YELLOW}Save this password now! It won't be shown again.${NC}"
+    echo ""
+    read -p "Press Enter when you've saved it..."
 else
-    read -p "Enter your email: " USER_EMAIL
-fi
-
-echo ""
-echo "Opening Cloudflare to create an API token..."
-echo ""
-echo -e "${BOLD}Follow these steps:${NC}"
-echo "  1. Click 'Create Token'"
-echo "  2. Click 'Create Custom Token' at the bottom"
-echo "  3. Name it: Homeport"
-echo "  4. Add these permissions:"
-echo "     Account | Access: Apps and Policies | Edit"
-echo "     Account | Account Settings | Read"
-echo "     Zone | Zone | Read"
-echo "     Zone | DNS | Edit"
-echo "  5. Click 'Continue to summary' → 'Create Token'"
-echo "  6. Copy the token"
-echo ""
-
-# Try to open browser, or show URL
-BROWSER_OPENED=false
-if command -v xdg-open &> /dev/null; then
-    xdg-open "https://dash.cloudflare.com/profile/api-tokens" 2>/dev/null && BROWSER_OPENED=true
-elif command -v open &> /dev/null; then
-    open "https://dash.cloudflare.com/profile/api-tokens" 2>/dev/null && BROWSER_OPENED=true
-fi
-
-if [ "$BROWSER_OPENED" = false ]; then
-    echo -e "Open this URL: ${BOLD}https://dash.cloudflare.com/profile/api-tokens${NC}"
-fi
-
-echo ""
-read -p "Paste your API token here (or Enter to skip): " CF_API_TOKEN
-
-if [ -n "$CF_API_TOKEN" ]; then
-    if [ -z "$USER_EMAIL" ]; then
-        echo -e "${YELLOW}[!]${NC} Email required for access policy, skipping Access setup"
-    else
-        # Get account ID
-        echo "Configuring Cloudflare Access..."
-        ACCOUNT_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts" \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            -H "Content-Type: application/json" | jq -r '.result[0].id')
-
-        # Save config for uninstall
-        mkdir -p ~/.homeport
-        cat > ~/.homeport/config << CFGEOF
-CF_API_TOKEN=$CF_API_TOKEN
-ACCOUNT_ID=$ACCOUNT_ID
-DOMAIN=$DOMAIN
-SSH_DOMAIN=$SSH_DOMAIN
-CFGEOF
-        chmod 600 ~/.homeport/config
-
-        if [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "null" ]; then
-            echo -e "${YELLOW}[!]${NC} Could not get account ID. Check your API token permissions."
-        else
-            # Create Access application for main domain
-            APP_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps" \
-                -H "Authorization: Bearer $CF_API_TOKEN" \
-                -H "Content-Type: application/json" \
-                --data "{
-                    \"name\": \"Homeport - $DOMAIN\",
-                    \"domain\": \"$DOMAIN\",
-                    \"type\": \"self_hosted\",
-                    \"session_duration\": \"24h\",
-                    \"auto_redirect_to_identity\": true
-                }")
-
-            APP_ID=$(echo "$APP_RESPONSE" | jq -r '.result.id')
-
-            if [ -n "$APP_ID" ] && [ "$APP_ID" != "null" ]; then
-                # Create access policy - allow only this email
-                curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps/$APP_ID/policies" \
-                    -H "Authorization: Bearer $CF_API_TOKEN" \
-                    -H "Content-Type: application/json" \
-                    --data "{
-                        \"name\": \"Allow owner\",
-                        \"decision\": \"allow\",
-                        \"include\": [{\"email\": {\"email\": \"$USER_EMAIL\"}}],
-                        \"precedence\": 1
-                    }" > /dev/null
-
-                echo -e "${GREEN}[*]${NC} Access configured for $DOMAIN (allowed: $USER_EMAIL)"
-
-                # Also protect SSH domain if set
-                if [ -n "$SSH_DOMAIN" ]; then
-                    SSH_APP_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps" \
-                        -H "Authorization: Bearer $CF_API_TOKEN" \
-                        -H "Content-Type: application/json" \
-                        --data "{
-                            \"name\": \"Homeport SSH - $SSH_DOMAIN\",
-                            \"domain\": \"$SSH_DOMAIN\",
-                            \"type\": \"ssh\",
-                            \"session_duration\": \"24h\",
-                            \"auto_redirect_to_identity\": true
-                        }")
-
-                    SSH_APP_ID=$(echo "$SSH_APP_RESPONSE" | jq -r '.result.id')
-
-                    if [ -n "$SSH_APP_ID" ] && [ "$SSH_APP_ID" != "null" ]; then
-                        curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps/$SSH_APP_ID/policies" \
-                            -H "Authorization: Bearer $CF_API_TOKEN" \
-                            -H "Content-Type: application/json" \
-                            --data "{
-                                \"name\": \"Allow owner\",
-                                \"decision\": \"allow\",
-                                \"include\": [{\"email\": {\"email\": \"$USER_EMAIL\"}}],
-                                \"precedence\": 1
-                            }" > /dev/null
-
-                        echo -e "${GREEN}[*]${NC} Access configured for $SSH_DOMAIN (allowed: $USER_EMAIL)"
-                    fi
-                fi
-            else
-                ERROR_MSG=$(echo "$APP_RESPONSE" | jq -r '.errors[0].message // "Unknown error"')
-                echo -e "${YELLOW}[!]${NC} Failed to create Access app: $ERROR_MSG"
-            fi
+    # Manual password entry
+    while true; do
+        echo ""
+        read -s -p "Enter password (min 8 characters): " ADMIN_PASSWORD
+        echo
+        if [ ${#ADMIN_PASSWORD} -lt 8 ]; then
+            echo -e "${RED}Password must be at least 8 characters${NC}"
+            continue
         fi
-    fi
-else
-    echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║  WARNING: YOUR TUNNEL IS PUBLICLY ACCESSIBLE WITHOUT AUTH!  ║${NC}"
-    echo -e "${RED}╚══════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo "Set up Cloudflare Access manually:"
-    echo "  1. Go to https://one.dash.cloudflare.com"
-    echo "  2. Access > Applications > Add application"
-    echo "  3. Protect: $DOMAIN"
-    if [ -n "$SSH_DOMAIN" ]; then
-        echo "  4. Also protect: $SSH_DOMAIN"
-    fi
-    echo ""
-    read -p "Press Enter to continue (at your own risk)..."
+        read -s -p "Confirm password: " ADMIN_PASSWORD_CONFIRM
+        echo
+        if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
+            echo -e "${RED}Passwords don't match${NC}"
+            continue
+        fi
+        break
+    done
+
+    # Hash using Go (secure - password never in command line)
+    ADMIN_PASSWORD_HASH=$(echo "$ADMIN_PASSWORD" | /tmp/homeportd-setup hash-password)
 fi
+
+# Clear password from memory
+unset ADMIN_PASSWORD ADMIN_PASSWORD_CONFIRM
+rm -f /tmp/homeportd-setup
+
+if [ -z "$ADMIN_PASSWORD_HASH" ]; then
+    echo -e "${RED}Failed to hash password.${NC}"
+    exit 1
+fi
+
+# Save config
+mkdir -p ~/.homeport
+cat > ~/.homeport/config << CFGEOF
+DOMAIN=$DOMAIN
+CFGEOF
+chmod 600 ~/.homeport/config
+
+echo -e "${GREEN}[*]${NC} Password configured"
 echo ""
 
 echo -e "${BLUE}[T-1] Ignition: Starting Homeport${NC}"
 echo "==========================================="
-
-# Get script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOMEPORT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Generate cookie secret for persistent sessions
 COOKIE_SECRET=$(openssl rand -hex 32)
@@ -463,6 +359,7 @@ DOMAIN=$DOMAIN
 EXTERNAL_URL=https://$DOMAIN
 CODE_SERVER_AUTH=none
 COOKIE_SECRET=$COOKIE_SECRET
+ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH
 EOF
 
 echo "Building Docker images (this may take a few minutes)..."
@@ -551,14 +448,6 @@ echo ""
 echo -e "Docking bays for dev servers:"
 echo -e "  ${BOLD}https://$DOMAIN/3000/${NC}        (example)"
 echo ""
-if [ -n "$SSH_DOMAIN" ]; then
-echo -e "Remote command access:"
-echo -e "  ${BOLD}https://$SSH_DOMAIN${NC}          SSH (browser)"
-echo ""
-echo "  Or from terminal:"
-echo "  cloudflared access ssh --hostname $SSH_DOMAIN"
-echo ""
-fi
 echo -e "${YELLOW}Note: DNS may take a few minutes to propagate.${NC}"
 echo ""
 echo "Mission control commands:"

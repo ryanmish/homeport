@@ -10,11 +10,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/gethomeport/homeport/internal/auth"
 	"github.com/gethomeport/homeport/internal/config"
 	"github.com/gethomeport/homeport/internal/github"
 	"github.com/gethomeport/homeport/internal/process"
@@ -37,6 +39,7 @@ type Server struct {
 	scanner  *scanner.Scanner
 	github   *github.Client
 	procs    *process.Manager
+	auth     *auth.Auth
 	router   chi.Router
 	stopScan chan struct{}
 }
@@ -48,6 +51,7 @@ func NewServer(cfg *config.Config, st *store.Store) *Server {
 		scanner:  scanner.New(cfg.PortRangeMin, cfg.PortRangeMax, cfg.ReposDir),
 		github:   github.NewClient(cfg.ReposDir),
 		procs:    process.NewManager(),
+		auth:     auth.New(cfg.PasswordHash, cfg.CookieSecret),
 		stopScan: make(chan struct{}),
 	}
 
@@ -58,72 +62,91 @@ func NewServer(cfg *config.Config, st *store.Store) *Server {
 func (s *Server) setupRouter() {
 	r := chi.NewRouter()
 
-	// Middleware
+	// Global middleware
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(corsMiddleware)
 
-	// API routes
-	r.Route("/api", func(r chi.Router) {
-		r.Get("/status", s.handleStatus)
-		r.Get("/ports", s.handleListPorts)
+	// Public routes (no auth required)
+	r.Get("/login", s.handleLoginPage)
+	r.Post("/login", s.handleLogin)
+	r.Get("/logout", s.handleLogout)
 
-		r.Route("/repos", func(r chi.Router) {
-			r.Get("/", s.handleListRepos)
-			r.Post("/", s.handleCloneRepo)
-			r.Post("/init", s.handleInitRepo)
-			r.Delete("/{id}", s.handleDeleteRepo)
-			r.Patch("/{id}", s.handleUpdateRepo)
-			r.Post("/{id}/pull", s.handlePullRepo)
-			r.Get("/{id}/status", s.handleGetRepoStatus)
-			r.Get("/{id}/info", s.handleGetRepoInfo)
-			r.Get("/{id}/branches", s.handleListBranches)
-			r.Post("/{id}/checkout", s.handleCheckoutBranch)
-			r.Post("/{id}/exec", s.handleExecCommand)
-			r.Post("/{id}/commit", s.handleGitCommit)
-			r.Post("/{id}/push", s.handleGitPush)
+	// Protected routes (auth required)
+	r.Group(func(r chi.Router) {
+		r.Use(s.auth.Middleware)
+
+		// API routes
+		r.Route("/api", func(r chi.Router) {
+			r.Get("/status", s.handleStatus)
+			r.Get("/ports", s.handleListPorts)
+
+			r.Route("/repos", func(r chi.Router) {
+				r.Get("/", s.handleListRepos)
+				r.Post("/", s.handleCloneRepo)
+				r.Post("/init", s.handleInitRepo)
+				r.Delete("/{id}", s.handleDeleteRepo)
+				r.Patch("/{id}", s.handleUpdateRepo)
+				r.Post("/{id}/pull", s.handlePullRepo)
+				r.Get("/{id}/status", s.handleGetRepoStatus)
+				r.Get("/{id}/info", s.handleGetRepoInfo)
+				r.Get("/{id}/branches", s.handleListBranches)
+				r.Post("/{id}/checkout", s.handleCheckoutBranch)
+				r.Post("/{id}/exec", s.handleExecCommand)
+				r.Post("/{id}/commit", s.handleGitCommit)
+				r.Post("/{id}/push", s.handleGitPush)
+			})
+
+			r.Route("/github", func(r chi.Router) {
+				r.Get("/repos", s.handleGitHubRepos)
+				r.Get("/search", s.handleGitHubSearch)
+				r.Get("/status", s.handleGitHubStatus)
+			})
+
+			r.Route("/share", func(r chi.Router) {
+				r.Post("/{port}", s.handleSharePort)
+				r.Delete("/{port}", s.handleUnsharePort)
+			})
+
+			r.Route("/processes", func(r chi.Router) {
+				r.Get("/", s.handleListProcesses)
+				r.Post("/{repoId}/start", s.handleStartProcess)
+				r.Post("/{repoId}/stop", s.handleStopProcess)
+				r.Get("/{repoId}/logs", s.handleGetProcessLogs)
+			})
+
+			r.Get("/version", s.handleVersion)
+			r.Get("/updates", s.handleCheckUpdates)
+			r.Get("/activity", s.handleGetActivity)
+
+			// Auth management endpoints
+			r.Post("/auth/change-password", s.handleChangePassword)
 		})
 
-		r.Route("/github", func(r chi.Router) {
-			r.Get("/repos", s.handleGitHubRepos)
-			r.Get("/search", s.handleGitHubSearch)
-			r.Get("/status", s.handleGitHubStatus)
+		// Code Server proxy at /code/*
+		r.Route("/code", func(r chi.Router) {
+			r.HandleFunc("/*", s.handleCodeServerProxy)
+			r.HandleFunc("/", s.handleCodeServerProxy)
 		})
 
-		r.Route("/share", func(r chi.Router) {
-			r.Post("/{port}", s.handleSharePort)
-			r.Delete("/{port}", s.handleUnsharePort)
+		// Dynamic port proxy - matches /{port}/* patterns
+		// This must come after /api to avoid conflicts
+		r.Route("/{port:[0-9]+}", func(r chi.Router) {
+			r.Use(s.portAuthMiddleware)
+			r.HandleFunc("/*", s.handleProxyDirect)
+			r.HandleFunc("/", s.handleProxyDirect)
 		})
 
-		r.Route("/processes", func(r chi.Router) {
-			r.Get("/", s.handleListProcesses)
-			r.Post("/{repoId}/start", s.handleStartProcess)
-			r.Post("/{repoId}/stop", s.handleStopProcess)
-			r.Get("/{repoId}/logs", s.handleGetProcessLogs)
-		})
+		// Serve UI at root
+		r.Get("/", s.handleServeUI)
 
-		r.Get("/version", s.handleVersion)
-		r.Get("/updates", s.handleCheckUpdates)
-		r.Get("/activity", s.handleGetActivity)
+		// Referer-based fallback for SPA assets
+		// When a request comes in without a port prefix (e.g., /@vite/client),
+		// check the Referer header to determine which port to proxy to.
+		// This allows path-based routing to work with SPAs that use absolute paths.
+		r.HandleFunc("/*", s.handleRefererFallback)
 	})
-
-	// Dynamic port proxy - matches /{port}/* patterns
-	// This must come after /api to avoid conflicts
-	r.Route("/{port:[0-9]+}", func(r chi.Router) {
-		r.Use(s.portAuthMiddleware)
-		r.HandleFunc("/*", s.handleProxyDirect)
-		r.HandleFunc("/", s.handleProxyDirect)
-	})
-
-	// Serve UI at root
-	r.Get("/", s.handleServeUI)
-
-	// Referer-based fallback for SPA assets
-	// When a request comes in without a port prefix (e.g., /@vite/client),
-	// check the Referer header to determine which port to proxy to.
-	// This allows path-based routing to work with SPAs that use absolute paths.
-	r.HandleFunc("/*", s.handleRefererFallback)
 
 	s.router = r
 }
@@ -221,6 +244,96 @@ func (s *Server) handleRefererFallback(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Referer-based proxy: %s -> port %d", r.URL.Path, port)
 	proxy.HandlerDirect(port).ServeHTTP(w, r)
+}
+
+// handleCodeServerProxy serves a wrapper page with navigation header,
+// or proxies requests to code-server
+func (s *Server) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) {
+	// Get the path after /code
+	path := strings.TrimPrefix(r.URL.Path, "/code")
+
+	// If requesting the root without query params, serve the wrapper page
+	// The iframe will request with ?folder= which bypasses the wrapper
+	if (path == "" || path == "/") && r.URL.RawQuery == "" {
+		s.serveCodeServerWrapper(w, r)
+		return
+	}
+
+	// Otherwise proxy to code-server
+	proxy.HandlerWithBase(8443, "/code").ServeHTTP(w, r)
+}
+
+// serveCodeServerWrapper serves an HTML page that wraps code-server with a nav header
+func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) {
+	wrapper := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VS Code - Homeport</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow: hidden; }
+        .homeport-nav {
+            height: 36px;
+            background: #1e1e1e;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            gap: 12px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+        }
+        .homeport-nav a {
+            color: #cccccc;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.15s;
+        }
+        .homeport-nav a:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+        .homeport-nav .logo {
+            font-weight: 600;
+            color: #3b82f6;
+        }
+        .homeport-nav .sep {
+            color: #666;
+        }
+        .homeport-nav svg {
+            width: 14px;
+            height: 14px;
+        }
+        iframe {
+            width: 100%;
+            height: calc(100% - 36px);
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <nav class="homeport-nav">
+        <a href="/" class="logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            Homeport
+        </a>
+        <span class="sep">/</span>
+        <span style="color: #ccc;">VS Code</span>
+    </nav>
+    <iframe src="/code/?folder=/home/coder/repos" allow="clipboard-read; clipboard-write"></iframe>
+</body>
+</html>`
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(wrapper))
 }
 
 // handleProxyDirect proxies requests to localhost:{port}

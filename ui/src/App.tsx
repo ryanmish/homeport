@@ -756,6 +756,7 @@ function App() {
             status={status}
             onClose={() => setShowSettingsModal(false)}
             onToggleTheme={toggleTheme}
+            addToast={addToast}
           />
         )}
 
@@ -1896,24 +1897,64 @@ function SettingsModal({
   theme,
   status,
   onClose,
-  onToggleTheme
+  onToggleTheme,
+  addToast
 }: {
   theme: Theme
   status: Status | null
   onClose: () => void
   onToggleTheme: () => void
+  addToast: (message: string, type?: 'success' | 'error' | 'info') => void
 }) {
   const [githubStatus, setGithubStatus] = useState<{
     authenticated: boolean
     user?: { login: string; name: string; email: string; avatarUrl: string }
   } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showPasswordChange, setShowPasswordChange] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
 
   useEffect(() => {
     api.getGitHubStatus()
       .then(setGithubStatus)
       .finally(() => setLoading(false))
   }, [])
+
+  const handlePasswordChange = async () => {
+    setPasswordError('')
+
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters')
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match')
+      return
+    }
+
+    setChangingPassword(true)
+    try {
+      const result = await api.changePassword(currentPassword, newPassword)
+      addToast(result.message, 'success')
+      setShowPasswordChange(false)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err) {
+      setPasswordError('Current password is incorrect')
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
+  const handleLogout = () => {
+    window.location.href = '/logout'
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[10vh] z-50 px-4" onClick={onClose}>
@@ -1980,6 +2021,83 @@ function SettingsModal({
                     {theme === 'dark' ? 'Dark' : 'Light'}
                   </span>
                 </button>
+              </div>
+            </div>
+
+            {/* Security */}
+            <div>
+              <label className={`text-xs font-medium uppercase tracking-wide ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                Security
+              </label>
+              <div className={`mt-2 divide-y rounded-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-800/50 divide-gray-700/50' : 'bg-gray-50 divide-gray-100'}`}>
+                {!showPasswordChange ? (
+                  <>
+                    <button
+                      onClick={() => setShowPasswordChange(true)}
+                      className={`w-full flex items-center justify-between p-3 transition-colors ${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Lock className={`h-4 w-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} />
+                        <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Change Password</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className={`w-full flex items-center gap-3 p-3 transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-red-400' : 'hover:bg-gray-100 text-red-500'}`}
+                    >
+                      <X className="h-4 w-4" />
+                      <span className="text-sm">Sign Out</span>
+                    </button>
+                  </>
+                ) : (
+                  <div className="p-3 space-y-3">
+                    <input
+                      type="password"
+                      placeholder="Current password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className={`w-full px-3 py-2 text-sm rounded-lg border ${theme === 'dark' ? 'bg-gray-900 border-gray-700 text-gray-100 placeholder-gray-500' : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400'}`}
+                    />
+                    <input
+                      type="password"
+                      placeholder="New password (min 8 characters)"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className={`w-full px-3 py-2 text-sm rounded-lg border ${theme === 'dark' ? 'bg-gray-900 border-gray-700 text-gray-100 placeholder-gray-500' : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400'}`}
+                    />
+                    <input
+                      type="password"
+                      placeholder="Confirm new password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className={`w-full px-3 py-2 text-sm rounded-lg border ${theme === 'dark' ? 'bg-gray-900 border-gray-700 text-gray-100 placeholder-gray-500' : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400'}`}
+                    />
+                    {passwordError && (
+                      <p className="text-sm text-red-500">{passwordError}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setShowPasswordChange(false)
+                          setCurrentPassword('')
+                          setNewPassword('')
+                          setConfirmPassword('')
+                          setPasswordError('')
+                        }}
+                        className={`flex-1 px-3 py-2 text-sm rounded-lg ${theme === 'dark' ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handlePasswordChange}
+                        disabled={changingPassword}
+                        className="flex-1 px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {changingPassword ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

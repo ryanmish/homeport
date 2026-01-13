@@ -24,6 +24,10 @@ type Config struct {
 	// External URLs (for generating shareable links)
 	ExternalURL string `yaml:"external_url"`
 
+	// Auth settings
+	PasswordHash string `yaml:"-"` // bcrypt hash of admin password
+	CookieSecret string `yaml:"-"` // secret for signing session cookies
+
 	// Dev mode (uses lsof instead of /proc, different paths)
 	DevMode bool `yaml:"-"`
 }

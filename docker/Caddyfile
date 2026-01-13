@@ -20,15 +20,7 @@
 		format console
 	}
 
-	# Code Server
-	# Access at /code/
-	handle_path /code/* {
-		reverse_proxy localhost:8443
-	}
-
-	# Homeport API and UI
-	# Everything else goes to homeportd
-	handle {
-		reverse_proxy localhost:8080
-	}
+	# Everything goes through homeportd for auth
+	# homeportd handles proxying to code-server at /code/*
+	reverse_proxy localhost:8080
 }

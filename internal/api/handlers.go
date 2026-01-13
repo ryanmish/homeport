@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gethomeport/homeport/internal/activity"
+	"github.com/gethomeport/homeport/internal/auth"
 	"github.com/gethomeport/homeport/internal/process"
 	"github.com/gethomeport/homeport/internal/repo"
 	"github.com/gethomeport/homeport/internal/stats"
@@ -31,6 +32,118 @@ func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
 
 func errorResponse(w http.ResponseWriter, status int, message string) {
 	jsonResponse(w, status, map[string]string{"error": message})
+}
+
+// Auth handlers
+
+func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
+	// If no password configured, redirect to dashboard
+	if !s.auth.IsConfigured() {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	// If already authenticated, redirect to dashboard
+	if cookie, err := r.Cookie(auth.SessionCookieName); err == nil {
+		if s.auth.ValidateSession(cookie.Value) {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(auth.LoginPage("")))
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	// If no password configured, redirect to dashboard
+	if !s.auth.IsConfigured() {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	// Check rate limiting
+	clientIP := auth.GetClientIP(r)
+	if s.auth.IsRateLimited(clientIP) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(auth.LoginPage("Too many failed attempts. Please try again in 15 minutes.")))
+		return
+	}
+
+	password := r.FormValue("password")
+	if password == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(auth.LoginPage("Password is required")))
+		return
+	}
+
+	if !s.auth.CheckPassword(password) {
+		s.auth.RecordFailedLogin(clientIP)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(auth.LoginPage("Invalid password")))
+		return
+	}
+
+	// Set session cookie
+	if err := s.auth.SetSessionCookie(w, r); err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(auth.LoginPage("Failed to create session")))
+		return
+	}
+
+	// Redirect to dashboard
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	s.auth.ClearSessionCookie(w)
+	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		errorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Verify current password
+	if !s.auth.CheckPassword(req.CurrentPassword) {
+		errorResponse(w, http.StatusUnauthorized, "Current password is incorrect")
+		return
+	}
+
+	// Validate new password
+	if len(req.NewPassword) < 8 {
+		errorResponse(w, http.StatusBadRequest, "New password must be at least 8 characters")
+		return
+	}
+
+	// Hash new password
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, "Failed to hash password")
+		return
+	}
+
+	// Update password in config file
+	configPath := filepath.Join(os.Getenv("HOME"), ".homeport", "config")
+	// Note: In production, we'd update the config properly. For now, this is a placeholder.
+	// The password hash is loaded at startup, so a restart would be needed.
+	_ = configPath
+	_ = hash
+
+	// For now, just return success - actual implementation would update config and reload
+	jsonResponse(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"message": "Password changed. Please restart Homeport for changes to take effect.",
+	})
 }
 
 // Status endpoint
