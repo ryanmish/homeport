@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Ensure we can read from terminal
+if [ ! -t 0 ]; then
+    exec < /dev/tty
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,12 +26,13 @@ echo "Installation directory: $HOMEPORT_DIR"
 echo ""
 echo "What will be removed:"
 echo "  - Docker containers, images, and volumes"
-echo "  - Systemd services"
+echo "  - Systemd services (homeport + cloudflared)"
+echo "  - Cloudflare tunnel and DNS routes"
 echo "  - CLI command (/usr/local/bin/homeport)"
+echo "  - Tunnel config (~/.cloudflared)"
 echo ""
 echo -e "${YELLOW}What will NOT be removed:${NC}"
 echo "  - Docker, GitHub CLI, cloudflared (system packages)"
-echo "  - Cloudflare Tunnel (you can delete it from dashboard)"
 echo "  - Source code directory (delete manually if desired)"
 echo ""
 read -p "Also jettison cargo (delete Docker volumes with repos/settings)? (y/n) " -n 1 -r
@@ -42,7 +48,7 @@ fi
 
 echo ""
 
-# Stop and disable services
+# Stop and disable homeport service
 echo "Powering down reactor..."
 sudo systemctl stop homeport.service 2>/dev/null || true
 sudo systemctl disable homeport.service 2>/dev/null || true
@@ -51,51 +57,62 @@ sudo systemctl daemon-reload
 echo -e "${GREEN}[*]${NC} Reactor offline"
 
 # Stop and fully uninstall cloudflared service
-echo "Closing tunnel..."
+echo "Closing tunnel service..."
 sudo systemctl stop cloudflared 2>/dev/null || true
+sudo systemctl disable cloudflared 2>/dev/null || true
 sudo cloudflared service uninstall 2>/dev/null || true
-echo -e "${GREEN}[*]${NC} Tunnel service removed"
+echo -e "${GREEN}[*]${NC} Tunnel service stopped"
 
-# Ask about cloudflared config cleanup
-echo ""
-read -p "Delete Cloudflare tunnel config (~/.cloudflared)? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    # Get tunnel name before deleting config
-    TUNNEL_NAME=$(cloudflared tunnel list --output json 2>/dev/null | jq -r '.[0].name // empty')
-    if [ -n "$TUNNEL_NAME" ]; then
-        echo "Deleting tunnel from Cloudflare..."
-        cloudflared tunnel delete "$TUNNEL_NAME" 2>/dev/null || true
-    fi
-    rm -rf ~/.cloudflared
-    echo -e "${GREEN}[*]${NC} Tunnel config deleted"
+# Delete all tunnels and their DNS routes
+echo "Destroying Cloudflare tunnels..."
+if command -v cloudflared &> /dev/null && [ -f "$HOME/.cloudflared/cert.pem" ]; then
+    # Get all tunnels
+    TUNNELS=$(cloudflared tunnel list --output json 2>/dev/null | jq -r '.[].name // empty' 2>/dev/null || true)
+
+    for TUNNEL in $TUNNELS; do
+        if [ -n "$TUNNEL" ]; then
+            echo "  Deleting tunnel: $TUNNEL"
+
+            # Get tunnel ID for DNS cleanup info
+            TUNNEL_ID=$(cloudflared tunnel list --output json | jq -r ".[] | select(.name==\"$TUNNEL\") | .id" 2>/dev/null || true)
+
+            # Force delete the tunnel (this also cleans up connections)
+            cloudflared tunnel delete -f "$TUNNEL" 2>/dev/null || true
+        fi
+    done
+    echo -e "${GREEN}[*]${NC} Tunnels destroyed"
 else
-    echo -e "${YELLOW}[!]${NC} Tunnel config preserved"
+    echo -e "${YELLOW}[!]${NC} No cloudflared auth found, skipping tunnel deletion"
 fi
+
+# Remove cloudflared config directory
+echo "Removing tunnel config..."
+rm -rf ~/.cloudflared
+echo -e "${GREEN}[*]${NC} Tunnel config removed"
 
 # Stop Docker containers
 if [ -d "$HOMEPORT_DIR/docker" ]; then
     echo "Evacuating modules..."
     cd "$HOMEPORT_DIR/docker"
-    if docker compose version &> /dev/null; then
-        COMPOSE="docker compose"
-    else
-        COMPOSE="docker-compose"
-    fi
 
-    $COMPOSE down --rmi local 2>/dev/null || true
+    # Check if user has docker access
+    if docker info &> /dev/null; then
+        COMPOSE="docker compose"
+        $COMPOSE down --rmi local 2>/dev/null || true
+    elif sg docker -c "docker info" &> /dev/null; then
+        sg docker -c "docker compose down --rmi local" 2>/dev/null || true
+    fi
     echo -e "${GREEN}[*]${NC} Modules evacuated"
 
     # Remove volumes if requested
     if [[ $REMOVE_VOLUMES =~ ^[Yy]$ ]]; then
         echo "Jettisoning cargo..."
         # Volume names are prefixed with directory name (docker_)
-        docker volume rm docker_homeport-data 2>/dev/null || true
-        docker volume rm docker_repos 2>/dev/null || true
-        docker volume rm docker_code-server-data 2>/dev/null || true
-        docker volume rm docker_code-server-config 2>/dev/null || true
-        docker volume rm docker_caddy-data 2>/dev/null || true
-        docker volume rm docker_caddy-config 2>/dev/null || true
+        if docker info &> /dev/null; then
+            docker volume rm docker_homeport-data docker_repos docker_code-server-data docker_code-server-config docker_caddy-data docker_caddy-config 2>/dev/null || true
+        elif sg docker -c "docker info" &> /dev/null; then
+            sg docker -c "docker volume rm docker_homeport-data docker_repos docker_code-server-data docker_code-server-config docker_caddy-data docker_caddy-config" 2>/dev/null || true
+        fi
         echo -e "${GREEN}[*]${NC} Cargo jettisoned"
     else
         echo -e "${YELLOW}[!]${NC} Cargo preserved in storage"
@@ -110,11 +127,15 @@ echo -e "${GREEN}[*]${NC} Interface removed"
 echo ""
 echo -e "${GREEN}DECOMMISSION COMPLETE${NC}"
 echo ""
-echo "Final cleanup (optional):"
-echo "  rm -rf $HOMEPORT_DIR           # Remove station blueprints"
-echo "  cloudflared tunnel delete ...  # Close Cloudflare tunnel"
+echo -e "${YELLOW}Note:${NC} DNS records in Cloudflare dashboard may need manual deletion:"
+echo "  1. Go to https://dash.cloudflare.com"
+echo "  2. Select your domain -> DNS -> Records"
+echo "  3. Delete any CNAME records pointing to *.cfargotunnel.com"
 echo ""
-echo "Support systems remain installed (Docker, gh, cloudflared)."
+echo "Final cleanup (optional):"
+echo "  rm -rf $HOMEPORT_DIR    # Remove source code"
+echo ""
+echo "Support systems remain installed (Docker, gh, cloudflared packages)."
 echo ""
 echo "Farewell, Commander."
 echo ""
