@@ -29,7 +29,7 @@ echo "  - Docker, GitHub CLI, cloudflared (system packages)"
 echo "  - Cloudflare Tunnel (you can delete it from dashboard)"
 echo "  - Source code directory (delete manually if desired)"
 echo ""
-read -p "Also jettison cargo (Docker volumes with repos/settings)? (y/n) " -n 1 -r
+read -p "Also jettison cargo (delete Docker volumes with repos/settings)? (y/n) " -n 1 -r
 REMOVE_VOLUMES=$REPLY
 echo
 echo ""
