@@ -179,53 +179,38 @@ sudo cloudflared service uninstall 2>/dev/null || true
 # Check if we have valid Cloudflare auth
 NEED_AUTH=true
 if [ -f "$HOME/.cloudflared/cert.pem" ]; then
-    # Test if auth is actually valid by trying to list tunnels
     if cloudflared tunnel list --output json &>/dev/null; then
         echo -e "${GREEN}[*]${NC} Cloudflare already authenticated"
         NEED_AUTH=false
 
-        # Check for existing tunnels
-        EXISTING_TUNNEL=$(cloudflared tunnel list --output json 2>/dev/null | jq -r '.[0].name // empty')
+        # Auto-use existing homeport tunnel if it exists with valid credentials
+        EXISTING_TUNNEL=$(cloudflared tunnel list --output json 2>/dev/null | jq -r '.[] | select(.name | startswith("homeport-")) | .name' | head -1)
         if [ -n "$EXISTING_TUNNEL" ]; then
-            # Check if tunnel credentials file exists
-            EXISTING_ID=$(cloudflared tunnel list --output json | jq -r '.[0].id // empty')
+            EXISTING_ID=$(cloudflared tunnel list --output json | jq -r ".[] | select(.name==\"$EXISTING_TUNNEL\") | .id")
             if [ -f "$HOME/.cloudflared/${EXISTING_ID}.json" ]; then
-                echo -e "${GREEN}[*]${NC} Found existing tunnel: $EXISTING_TUNNEL"
-                read -p "Use existing tunnel? (y/n) " -n 1 -r
-                echo
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    TUNNEL_NAME=$EXISTING_TUNNEL
-                fi
+                echo -e "${GREEN}[*]${NC} Using existing tunnel: $EXISTING_TUNNEL"
+                TUNNEL_NAME=$EXISTING_TUNNEL
             else
-                echo -e "${YELLOW}[!]${NC} Found tunnel '$EXISTING_TUNNEL' but credentials missing"
-                echo "Deleting orphaned tunnel..."
                 cloudflared tunnel delete "$EXISTING_TUNNEL" 2>/dev/null || true
             fi
         fi
     else
-        echo -e "${YELLOW}[!]${NC} Cloudflare auth expired or invalid, re-authenticating..."
         rm -rf "$HOME/.cloudflared"
     fi
 fi
 
 if [ "$NEED_AUTH" = true ]; then
     echo ""
-    echo "You need to authenticate with Cloudflare."
-    echo "A URL will be displayed - open it in your browser to log in."
-    echo ""
+    echo "Authenticate with Cloudflare (opens browser)..."
     cloudflared tunnel login
     echo -e "${GREEN}[*]${NC} Cloudflare authenticated"
 fi
 
 # Create tunnel if needed
 if [ -z "$TUNNEL_NAME" ]; then
-    echo ""
     TUNNEL_NAME="homeport-$(hostname)"
-    echo "Creating tunnel: $TUNNEL_NAME"
-
-    # Delete any existing tunnel with same name first (in case of partial cleanup)
     cloudflared tunnel delete "$TUNNEL_NAME" 2>/dev/null || true
-
+    echo "Creating tunnel: $TUNNEL_NAME"
     cloudflared tunnel create "$TUNNEL_NAME"
 fi
 
@@ -240,8 +225,7 @@ echo -e "${GREEN}[*]${NC} Tunnel ID: $TUNNEL_ID"
 
 # Get domain
 echo ""
-echo -e "${BOLD}Enter your domain${NC}"
-echo "This domain must be managed by Cloudflare."
+echo -e "${BOLD}Enter your domain${NC} (must be managed by Cloudflare)"
 echo "Example: dev.yourdomain.com"
 echo ""
 read -p "Domain: " DOMAIN
@@ -251,29 +235,10 @@ if [ -z "$DOMAIN" ]; then
     exit 1
 fi
 
-# Ask about SSH access
-echo ""
-echo -e "${BOLD}Enable SSH access via Cloudflare Tunnel?${NC}"
-echo "This allows you to SSH into your server from anywhere"
-echo "without exposing port 22 to the internet."
-echo ""
-read -p "Enable SSH tunnel? (y/n) " -n 1 -r
-ENABLE_SSH=$REPLY
-echo ""
-
-SSH_DOMAIN=""
-if [[ $ENABLE_SSH =~ ^[Yy]$ ]]; then
-    # Extract base domain from the provided domain
-    # e.g., dev.example.com -> example.com
-    BASE_DOMAIN=$(echo "$DOMAIN" | rev | cut -d'.' -f1,2 | rev)
-    DEFAULT_SSH="ssh.$BASE_DOMAIN"
-
-    echo ""
-    echo "Enter subdomain for SSH access"
-    echo -e "Default: ${BOLD}$DEFAULT_SSH${NC}"
-    read -p "SSH Domain [$DEFAULT_SSH]: " SSH_DOMAIN
-    SSH_DOMAIN=${SSH_DOMAIN:-$DEFAULT_SSH}
-fi
+# SSH enabled by default with auto-generated subdomain
+BASE_DOMAIN=$(echo "$DOMAIN" | rev | cut -d'.' -f1,2 | rev)
+SSH_DOMAIN="ssh.${DOMAIN%%.*}.$BASE_DOMAIN"
+echo -e "${GREEN}[*]${NC} SSH access will be at: $SSH_DOMAIN"
 
 # Create tunnel config
 mkdir -p "$HOME/.cloudflared"
@@ -334,22 +299,29 @@ echo "============================================="
 echo ""
 echo -e "${BOLD}Cloudflare Access protects your tunnel with authentication.${NC}"
 echo ""
-echo "To set this up, you need a Cloudflare API token."
-echo "Create one at: https://dash.cloudflare.com/profile/api-tokens"
+
+# Auto-detect email from GitHub
+USER_EMAIL=$(gh api user -q .email 2>/dev/null || echo "")
+if [ -z "$USER_EMAIL" ] || [ "$USER_EMAIL" = "null" ]; then
+    USER_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
+fi
+
+if [ -n "$USER_EMAIL" ]; then
+    echo -e "Detected email: ${BOLD}$USER_EMAIL${NC}"
+else
+    read -p "Enter your email: " USER_EMAIL
+fi
+
 echo ""
-echo "Required permissions:"
-echo "  - Account > Access: Apps and Policies > Edit"
-echo "  - Account > Account Settings > Read"
-echo "  - Zone > Zone > Read"
-echo "  - Zone > DNS > Edit"
+echo "Create an API token with these permissions:"
+echo "  Account: Access Apps/Policies (Edit), Account Settings (Read)"
+echo "  Zone: Zone (Read), DNS (Edit)"
 echo ""
-read -p "Enter your Cloudflare API token (or press Enter to skip): " CF_API_TOKEN
+echo -e "${BOLD}Quick link:${NC} https://dash.cloudflare.com/profile/api-tokens"
+echo ""
+read -p "Paste your API token: " CF_API_TOKEN
 
 if [ -n "$CF_API_TOKEN" ]; then
-    # Get user's email for access policy
-    echo ""
-    read -p "Enter your email (for access policy): " USER_EMAIL
-
     if [ -z "$USER_EMAIL" ]; then
         echo -e "${YELLOW}[!]${NC} Email required for access policy, skipping Access setup"
     else
