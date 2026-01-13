@@ -159,7 +159,7 @@ func computeHMAC(data string) string {
 func PasswordFormHTML(port int, errorMsg string) string {
 	errorHTML := ""
 	if errorMsg != "" {
-		errorHTML = fmt.Sprintf(`<p style="color: #ef4444; margin-bottom: 16px;">%s</p>`, errorMsg)
+		errorHTML = fmt.Sprintf(`<div class="error">%s</div>`, errorMsg)
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html>
@@ -171,7 +171,7 @@ func PasswordFormHTML(port int, errorMsg string) string {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f9fafb;
+            background: #ffffff;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -179,76 +179,101 @@ func PasswordFormHTML(port int, errorMsg string) string {
             padding: 20px;
         }
         .container {
-            background: white;
-            padding: 32px;
+            background: #ffffff;
+            padding: 40px;
+            border: 1px solid #e5e7eb;
             border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
             width: 100%%;
             max-width: 400px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .port-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            background: #111827;
+            color: white;
+            border-radius: 12px;
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
         }
         h1 {
             font-size: 24px;
             font-weight: 600;
             color: #111827;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
-        p {
+        .subtitle {
             color: #6b7280;
-            margin-bottom: 24px;
+            font-size: 14px;
+        }
+        .error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
         }
         label {
             display: block;
             font-size: 14px;
             font-weight: 500;
             color: #374151;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         input[type="password"] {
             width: 100%%;
-            padding: 12px;
-            border: 1px solid #d1d5db;
+            padding: 12px 16px;
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
             font-size: 16px;
             margin-bottom: 16px;
+            color: #111827;
         }
         input[type="password"]:focus {
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
+            border-color: #111827;
+        }
+        input[type="password"]::placeholder {
+            color: #9ca3af;
         }
         button {
             width: 100%%;
-            padding: 12px;
-            background: #3b82f6;
+            padding: 12px 16px;
+            background: #111827;
             color: white;
             border: none;
             border-radius: 8px;
             font-size: 16px;
             font-weight: 500;
             cursor: pointer;
+            transition: background 0.2s;
         }
         button:hover {
-            background: #2563eb;
-        }
-        .port-badge {
-            display: inline-block;
-            background: #e5e7eb;
-            color: #374151;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
+            background: #374151;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Password Required</h1>
-        <p>Enter the password to access <span class="port-badge">:%d</span></p>
+        <div class="header">
+            <div class="port-badge">:%d</div>
+            <h1>Password Required</h1>
+            <p class="subtitle">This port is protected</p>
+        </div>
         %s
         <form method="POST" action="/%d/_auth">
             <label for="password">Password</label>
-            <input type="password" id="password" name="password" required autofocus>
+            <input type="password" id="password" name="password" placeholder="Enter password" required autofocus>
             <button type="submit">Continue</button>
         </form>
     </div>

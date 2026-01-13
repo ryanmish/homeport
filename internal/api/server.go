@@ -300,13 +300,12 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         html, body { height: 100%%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
 
         .homeport-header {
-            height: 48px;
+            height: 56px;
             background: #ffffff;
-            border-bottom: 1px solid #e5e7eb;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 16px;
+            padding: 0 24px;
         }
 
         .header-left {
@@ -316,62 +315,44 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         }
 
         .logo-box {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
             background: #111827;
-            border-radius: 8px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
         .logo-box svg {
-            width: 18px;
-            height: 18px;
+            width: 20px;
+            height: 20px;
             color: white;
-        }
-
-        .brand {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .brand-name {
-            font-size: 14px;
-            font-weight: 600;
-            color: #111827;
-            text-decoration: none;
-        }
-
-        .brand-name:hover {
-            color: #3b82f6;
-        }
-
-        .brand-version {
-            font-size: 11px;
-            color: #9ca3af;
-            font-family: monospace;
         }
 
         .nav-breadcrumb {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-left: 16px;
-            padding-left: 16px;
-            border-left: 1px solid #e5e7eb;
-        }
-
-        .nav-sep {
-            color: #9ca3af;
-        }
-
-        .nav-item {
             color: #6b7280;
-            font-size: 13px;
+            font-size: 14px;
         }
 
-        .nav-item.active {
+        .nav-breadcrumb a {
+            color: #6b7280;
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+
+        .nav-breadcrumb a:hover {
+            color: #111827;
+        }
+
+        .nav-breadcrumb .sep {
+            color: #d1d5db;
+        }
+
+        .nav-breadcrumb .current {
             color: #111827;
             font-weight: 500;
         }
@@ -379,22 +360,66 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         .header-right {
             display: flex;
             align-items: center;
+            gap: 12px;
+        }
+
+        .port-indicator {
+            display: none;
+            align-items: center;
             gap: 8px;
+            padding: 6px 12px;
+            background: #f3f4f6;
+            border-radius: 8px;
+        }
+
+        .port-indicator.active {
+            display: flex;
+        }
+
+        .port-indicator .dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%%;
+        }
+
+        .port-indicator .port-num {
+            font-family: monospace;
+            font-size: 13px;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .port-indicator .share-btn {
+            padding: 4px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #6b7280;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+        }
+
+        .port-indicator .share-btn:hover {
+            background: #e5e7eb;
+            color: #374151;
         }
 
         .header-btn {
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 13px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.15s;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             border: 1px solid #e5e7eb;
             background: white;
             color: #374151;
+            text-decoration: none;
         }
 
         .header-btn:hover {
@@ -402,32 +427,22 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             border-color: #d1d5db;
         }
 
-        .header-btn.primary {
-            background: #111827;
-            color: white;
-            border-color: #111827;
-        }
-
-        .header-btn.primary:hover {
-            background: #1f2937;
-        }
-
         .header-btn svg {
-            width: 14px;
-            height: 14px;
+            width: 16px;
+            height: 16px;
         }
 
         iframe {
             width: 100%%;
-            height: calc(100%% - 48px);
+            height: calc(100%% - 56px);
             border: none;
         }
 
         /* Toast notifications */
         .toast-container {
             position: fixed;
-            top: 60px;
-            right: 16px;
+            top: 68px;
+            right: 24px;
             z-index: 9999;
             display: flex;
             flex-direction: column;
@@ -602,29 +617,35 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
 <body>
     <header class="homeport-header">
         <div class="header-left">
-            <a href="/" style="display: flex; align-items: center; gap: 12px; text-decoration: none;">
+            <a href="/" style="text-decoration: none;">
                 <div class="logo-box">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                         <polyline points="9 22 9 12 15 12 15 22"/>
                     </svg>
                 </div>
-                <div class="brand">
-                    <span class="brand-name">Homeport</span>
-                    <span class="brand-version">v0.1.0</span>
-                </div>
             </a>
             <div class="nav-breadcrumb">
-                <span class="nav-sep">/</span>
-                <span class="nav-item active">VS Code</span>
+                <a href="/">Dashboard</a>
+                <span class="sep">/</span>
+                <span class="current">%s</span>
             </div>
         </div>
         <div class="header-right">
+            <div class="port-indicator" id="portIndicator">
+                <span class="dot"></span>
+                <span class="port-num" id="portNum">:3000</span>
+                <button class="share-btn" id="shareBtn" title="Share settings">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="18" cy="5" r="3"/>
+                        <circle cx="6" cy="12" r="3"/>
+                        <circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
+                </button>
+            </div>
             <a href="/" class="header-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                    <polyline points="9 22 9 12 15 12 15 22"/>
-                </svg>
                 Dashboard
             </a>
         </div>
@@ -641,6 +662,8 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         let dismissedPorts = new Set();
 
         // Poll for new ports
+        let activePort = null;
+
         async function checkPorts() {
             try {
                 const resp = await fetch('/api/ports', { credentials: 'include' });
@@ -655,6 +678,22 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                     return p.repo_id === REPO_NAME ||
                            (!p.repo_id && p.port >= 3000 && p.port <= 9999);
                 });
+
+                // Update header port indicator with first active port
+                const indicator = document.getElementById('portIndicator');
+                const portNum = document.getElementById('portNum');
+                const shareBtn = document.getElementById('shareBtn');
+
+                if (relevantPorts.length > 0) {
+                    const firstPort = relevantPorts[0];
+                    activePort = firstPort;
+                    indicator.classList.add('active');
+                    portNum.textContent = ':' + firstPort.port;
+                    shareBtn.onclick = () => showShareModal(firstPort.port, firstPort.share_mode);
+                } else {
+                    activePort = null;
+                    indicator.classList.remove('active');
+                }
 
                 for (const port of relevantPorts) {
                     if (!knownPorts.has(port.port) && !dismissedPorts.has(port.port)) {
@@ -813,7 +852,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         setInterval(checkPorts, 3000);
     </script>
 </body>
-</html>`, iframeSrc, repoName, s.cfg.ExternalURL)
+</html>`, repoName, iframeSrc, repoName, s.cfg.ExternalURL)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(wrapper))
 }

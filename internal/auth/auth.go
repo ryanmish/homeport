@@ -262,39 +262,54 @@ func LoginPage(error string) string {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%%, #16213e 100%%);
+            background: #ffffff;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #fff;
+            color: #111827;
         }
         .container {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
             padding: 40px;
             width: 100%%;
             max-width: 400px;
-            backdrop-filter: blur(10px);
         }
         .logo {
             text-align: center;
             margin-bottom: 32px;
         }
+        .logo-box {
+            width: 48px;
+            height: 48px;
+            background: #111827;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+        }
+        .logo-box svg {
+            width: 28px;
+            height: 28px;
+            color: white;
+        }
         .logo h1 {
-            font-size: 28px;
+            font-size: 24px;
             font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
+            color: #111827;
         }
         .logo p {
-            color: rgba(255, 255, 255, 0.6);
+            color: #6b7280;
             font-size: 14px;
         }
         .error {
-            background: rgba(239, 68, 68, 0.2);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #fca5a5;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
             padding: 12px 16px;
             border-radius: 8px;
             margin-bottom: 20px;
@@ -304,32 +319,32 @@ func LoginPage(error string) string {
         label {
             font-size: 14px;
             font-weight: 500;
-            color: rgba(255, 255, 255, 0.8);
+            color: #374151;
         }
         input[type="password"] {
             width: 100%%;
             padding: 12px 16px;
             font-size: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
+            background: #ffffff;
+            color: #111827;
             margin-top: 6px;
             outline: none;
             transition: border-color 0.2s;
         }
         input[type="password"]:focus {
-            border-color: #3b82f6;
+            border-color: #111827;
         }
         input[type="password"]::placeholder {
-            color: rgba(255, 255, 255, 0.3);
+            color: #9ca3af;
         }
         button {
             width: 100%%;
             padding: 12px 16px;
             font-size: 16px;
             font-weight: 500;
-            background: #3b82f6;
+            background: #111827;
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -337,9 +352,9 @@ func LoginPage(error string) string {
             transition: background 0.2s;
             margin-top: 8px;
         }
-        button:hover { background: #2563eb; }
+        button:hover { background: #374151; }
         button:disabled {
-            background: #64748b;
+            background: #9ca3af;
             cursor: not-allowed;
         }
     </style>
@@ -347,6 +362,12 @@ func LoginPage(error string) string {
 <body>
     <div class="container">
         <div class="logo">
+            <div class="logo-box">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+            </div>
             <h1>Homeport</h1>
             <p>Remote Development Environment</p>
         </div>

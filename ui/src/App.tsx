@@ -503,11 +503,11 @@ function App() {
         )}
 
         {/* Header */}
-        <header className={`sticky top-0 z-40 border-b backdrop-blur-sm transition-colors ${theme === 'dark' ? 'bg-gray-900/95 border-gray-800' : 'bg-white/95 border-gray-200'}`}>
+        <header className={`sticky top-0 z-40 transition-colors ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}>
           <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
             {/* Logo and brand */}
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-sm ${theme === 'dark' ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`}>
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`}>
                 <Logo size={20} />
               </div>
               <div className="flex flex-col">
@@ -632,7 +632,7 @@ function App() {
             </div>
 
             {repos.length === 0 ? (
-              <Card className={theme === 'dark' ? 'bg-gray-900 border-gray-800' : ''}>
+              <Card className={theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'border-gray-200'}>
                 <CardContent className="py-10">
                   <div className="text-center space-y-4">
                     <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -704,7 +704,7 @@ function App() {
                     Read-only
                   </span>
                 </div>
-                <Card className={`${theme === 'dark' ? 'bg-gray-900/50 border-gray-800' : 'bg-gray-50/50'}`}>
+                <Card className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'border-gray-200'}`}>
                   <CardContent className="pt-4 space-y-1">
                     {externalPorts.map((port) => (
                       <ExternalPortRow key={port.port} port={port} theme={theme} />
@@ -961,10 +961,10 @@ function StatCard({
   const color = percentage > 80 ? 'bg-red-500' : percentage > 60 ? 'bg-yellow-500' : 'bg-green-500'
 
   return (
-    <Card className={`group transition-all duration-200 hover:shadow-md ${theme === 'dark' ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'hover:shadow-lg'}`}>
+    <Card className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'border-gray-200'}`}>
       <CardContent className="pt-4 sm:pt-5 pb-3 sm:pb-4 px-3 sm:px-6">
         <div className="flex items-start justify-between mb-2 sm:mb-3">
-          <div className={`p-1.5 sm:p-2 rounded-lg transition-colors ${theme === 'dark' ? 'bg-gray-800 text-gray-400 group-hover:bg-gray-700' : 'bg-gray-100 text-gray-600 group-hover:bg-gray-200'}`}>
+          <div className={`p-1.5 sm:p-2 rounded-lg ${theme === 'dark' ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>
             {icon}
           </div>
           <div className="text-right">
@@ -1067,7 +1067,7 @@ function RepoCard({
   }, [])
 
   return (
-    <Card className={`transition-all duration-200 hover:shadow-md ${theme === 'dark' ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'hover:shadow-lg'}`}>
+    <Card className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'border-gray-200'}`}>
       <CardHeader className={`py-4 ${theme === 'dark' ? 'bg-gray-800/30' : 'bg-gray-50/50'}`}>
         <div className="flex items-start justify-between gap-4">
           {/* Left side: repo info */}
@@ -1172,24 +1172,24 @@ function RepoCard({
                 <Zap className="h-4 w-4" />
               </Button>
               {showQuickActions && (
-                <div className={`absolute right-0 top-full mt-1 w-40 rounded-lg shadow-lg border z-50 py-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                <div className={`absolute right-0 top-full mt-1 w-44 rounded-lg shadow-lg border z-50 py-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <button
                     onClick={() => { onExecCommand('install'); setShowQuickActions(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
                     <Package className="h-4 w-4" />
                     Install deps
                   </button>
                   <button
                     onClick={() => { onExecCommand('fetch'); setShowQuickActions(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
                     <Download className="h-4 w-4" />
                     Git fetch
                   </button>
                   <button
                     onClick={() => { onExecCommand('reset'); setShowQuickActions(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap text-red-600 ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
                     <RotateCcw className="h-4 w-4" />
                     Reset HEAD
@@ -1210,19 +1210,19 @@ function RepoCard({
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
               {showMenu && (
-                <div className={`absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg border z-50 py-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                <div className={`absolute right-0 top-full mt-1 w-56 rounded-lg shadow-lg border z-50 py-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <a
                     href={`/code/?folder=${toCodeServerPath(repo.path)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm sm:hidden ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap sm:hidden ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
                     <Terminal className="h-4 w-4" />
                     Open in VS Code
                   </a>
                   <button
                     onClick={() => { onPull(); setShowMenu(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm sm:hidden ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap sm:hidden ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
                     <RefreshCw className="h-4 w-4" />
                     Pull Latest
@@ -1233,14 +1233,14 @@ function RepoCard({
                       <>
                         <button
                           onClick={() => { onStopProcess(); setShowMenu(false); }}
-                          className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                          className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                         >
                           <Square className="h-4 w-4" />
                           Stop Server
                         </button>
                         <button
                           onClick={() => { onShowLogs(); setShowMenu(false); }}
-                          className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                          className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                         >
                           <ScrollText className="h-4 w-4" />
                           View Logs
@@ -1249,7 +1249,7 @@ function RepoCard({
                     ) : (
                       <button
                         onClick={() => { onStartProcess(); setShowMenu(false); }}
-                        className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                        className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                       >
                         <Play className="h-4 w-4" />
                         Start Server
@@ -1260,7 +1260,7 @@ function RepoCard({
                   {gitStatus?.is_dirty && (
                     <button
                       onClick={() => { onCommit(); setShowMenu(false); }}
-                      className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                      className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                     >
                       <GitCommit className="h-4 w-4" />
                       Commit Changes
@@ -1269,7 +1269,7 @@ function RepoCard({
                   {gitStatus && gitStatus.ahead > 0 && (
                     <button
                       onClick={() => { onPush(); setShowMenu(false); }}
-                      className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                      className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                     >
                       <Upload className="h-4 w-4" />
                       Push Changes
@@ -1278,14 +1278,14 @@ function RepoCard({
                   <div className={`my-1 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} />
                   <button
                     onClick={() => { onConfigureStart(); setShowMenu(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
                     <Pencil className="h-4 w-4" />
                     Configure Start Command
                   </button>
                   <button
                     onClick={() => { onDelete(); setShowMenu(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap text-red-600 ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
                     <Trash2 className="h-4 w-4" />
                     Delete Repository
@@ -1970,7 +1970,7 @@ function SettingsModal({
         <div className={`p-4 border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
           <h2 className={`text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Settings</h2>
         </div>
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="max-h-[80vh] overflow-y-auto">
           <div className="p-4 space-y-4">
             {/* GitHub Account */}
             <div>
