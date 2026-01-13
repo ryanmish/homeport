@@ -19,6 +19,9 @@ export default defineConfig(() => {
         '/api': 'http://localhost:8080',
       },
     },
+    define: isVSCodeBuild ? {
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    } : undefined,
     build: isVSCodeBuild ? {
       // VS Code share component build
       lib: {
