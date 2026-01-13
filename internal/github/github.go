@@ -267,8 +267,17 @@ type PullResult struct {
 }
 
 // PullWithDetails runs git pull and returns detailed results
+// It checks for uncommitted changes first and warns if any are found
 func (c *Client) PullWithDetails(repoPath string) (*PullResult, error) {
 	result := &PullResult{Success: true}
+
+	// Check for uncommitted changes first
+	status, err := c.GetStatus(repoPath)
+	if err == nil && status.HasChanges {
+		result.Success = false
+		result.Message = fmt.Sprintf("Cannot pull: you have %d uncommitted change(s). Please commit or stash your changes first.", status.ModifiedCount+status.UntrackedCount)
+		return result, nil
+	}
 
 	cmd := exec.Command("git", "-C", repoPath, "pull", "--stat")
 	output, err := cmd.CombinedOutput()
