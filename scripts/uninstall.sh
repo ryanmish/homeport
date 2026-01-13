@@ -133,12 +133,13 @@ sudo cloudflared service uninstall 2>/dev/null || true
 
 echo "  Killing cloudflared processes..."
 # Multiple methods to ensure all processes are killed
-sudo pkill -9 -x cloudflared 2>/dev/null || true
-sudo pkill -9 -f "cloudflared tunnel" 2>/dev/null || true
-sudo pkill -9 -f "cloudflared --config" 2>/dev/null || true
-pkill -9 -x cloudflared 2>/dev/null || true
-sudo killall -9 cloudflared 2>/dev/null || true
-killall -9 cloudflared 2>/dev/null || true
+# Run in subshell to suppress "Killed" messages from job control
+(sudo pkill -9 -x cloudflared 2>/dev/null || true) &>/dev/null
+(sudo pkill -9 -f "cloudflared tunnel" 2>/dev/null || true) &>/dev/null
+(sudo pkill -9 -f "cloudflared --config" 2>/dev/null || true) &>/dev/null
+(pkill -9 -x cloudflared 2>/dev/null || true) &>/dev/null
+(sudo killall -9 cloudflared 2>/dev/null || true) &>/dev/null
+(killall -9 cloudflared 2>/dev/null || true) &>/dev/null
 
 # Wait and do a final check
 sleep 2
