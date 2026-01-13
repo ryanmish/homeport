@@ -318,17 +318,14 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         .logo-box {
             width: 36px;
             height: 36px;
-            background: #111827;
             border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            overflow: hidden;
         }
 
-        .logo-box svg {
-            width: 20px;
-            height: 20px;
-            color: white;
+        .logo-box img {
+            width: 100%%;
+            height: 100%%;
+            object-fit: cover;
         }
 
         .nav-breadcrumb {
@@ -857,10 +854,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         <div class="header-left">
             <a href="/" style="text-decoration: none;">
                 <div class="logo-box">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                        <polyline points="9 22 9 12 15 12 15 22"/>
-                    </svg>
+                    <img src="/favicon.webp" alt="Homeport">
                 </div>
             </a>
             <div class="nav-breadcrumb">
@@ -1058,6 +1052,10 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             isStopping = false;
             btn.disabled = false;
             btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg> Stop';
+            // Re-enable other buttons
+            document.getElementById('copyBtn').disabled = false;
+            document.getElementById('openBtn').disabled = false;
+            document.getElementById('shareBtn').disabled = false;
         }
 
         async function startServer() {
@@ -1132,6 +1130,10 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             const btn = document.getElementById('stopBtn');
             btn.disabled = true;
             btn.innerHTML = '<svg class="animate-spin" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Stopping...';
+            // Disable other buttons while stopping
+            document.getElementById('copyBtn').disabled = true;
+            document.getElementById('openBtn').disabled = true;
+            document.getElementById('shareBtn').disabled = true;
 
             try {
                 const resp = await fetch('/api/repos', { credentials: 'include' });
@@ -1237,22 +1239,21 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                             <div class="share-option-title">Password</div>
                             <div class="share-option-desc">Anyone with the password can access</div>
                         </div>
+                        ${selectedMode === 'password' ? ` + "`" + `
+                            <div class="share-password-field" style="margin: -4px 0 8px 0;">
+                                <div class="password-input-wrapper">
+                                    <input type="${showPassword ? 'text' : 'password'}" id="sharePasswordInput" value="${sharePassword}" placeholder="Enter password..." oninput="event.stopPropagation(); sharePassword = this.value" onclick="event.stopPropagation()" />
+                                    <button class="password-toggle" onclick="event.stopPropagation(); togglePasswordVisibility(${port})">
+                                        ${showPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'}
+                                    </button>
+                                </div>
+                            </div>
+                        ` + "`" + ` : ''}
                         <div class="share-option ${selectedMode === 'public' ? 'active' : ''}" onclick="event.stopPropagation(); selectShareMode('public', ${port})">
                             <div class="share-option-title">Public</div>
                             <div class="share-option-desc">Anyone with the link can access</div>
                         </div>
                     </div>
-                    ${selectedMode === 'password' ? ` + "`" + `
-                        <div class="share-password-field">
-                            <div class="share-label">Password</div>
-                            <div class="password-input-wrapper">
-                                <input type="${showPassword ? 'text' : 'password'}" id="sharePasswordInput" value="${sharePassword}" placeholder="Enter password..." oninput="event.stopPropagation(); sharePassword = this.value" onclick="event.stopPropagation()" />
-                                <button class="password-toggle" onclick="event.stopPropagation(); togglePasswordVisibility(${port})">
-                                    ${showPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'}
-                                </button>
-                            </div>
-                        </div>
-                    ` + "`" + ` : ''}
                     <div class="share-actions">
                         <button class="share-action-btn cancel" onclick="event.stopPropagation(); shareDropdown.remove(); shareDropdown = null; document.removeEventListener('click', closeShareDropdown);">Cancel</button>
                         <button class="share-action-btn copy" onclick="event.stopPropagation(); applyShareMode(${port}, true)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply & Copy URL</button>

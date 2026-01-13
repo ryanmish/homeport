@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Toaster, toast } from '@/components/ui/sonner'
 import { api, type Repo, type Port, type Status, type GitHubRepo, type GitStatus, type RepoInfo, type BranchInfo, type UpdateInfo, type Process, type LogEntry, type ActivityEntry } from '@/lib/api'
-import { Logo } from '@/components/Logo'
 import {
   ExternalLink,
   Copy,
@@ -541,8 +540,8 @@ function App() {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
             {/* Logo and brand */}
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`}>
-                <Logo size={20} />
+              <div className="w-9 h-9 rounded-xl overflow-hidden">
+                <img src="/favicon.webp" alt="Homeport" className="w-full h-full object-cover" />
               </div>
               <div className="flex flex-col">
                 <h1 className="text-base font-semibold leading-tight">Homeport</h1>
@@ -1428,7 +1427,7 @@ function PortRow({
   }
 
   return (
-    <div className={`flex items-center justify-between py-2 sm:py-2.5 px-2 sm:px-3 rounded-lg transition-colors group ${theme === 'dark' ? 'bg-gray-800/50 hover:bg-gray-800' : 'bg-gray-50 hover:bg-gray-100'}`}>
+    <div className={`flex items-center justify-between p-3 rounded-lg transition-colors group ${theme === 'dark' ? 'bg-gray-800/50 hover:bg-gray-800' : 'bg-gray-50 hover:bg-gray-100'}`}>
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         {/* Health indicator */}
         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isHealthy === true ? 'bg-green-500' : isHealthy === false ? 'bg-red-500' : 'bg-gray-400'}`} title={isHealthy ? 'Responding' : 'Not responding'} />
@@ -1571,40 +1570,33 @@ function ShareMenu({
     }
   }
 
-  const modeOptions = [
-    { value: 'private', title: 'Private', desc: 'Only accessible when logged into Homeport' },
-    { value: 'password', title: 'Password', desc: 'Anyone with the password can access' },
-    { value: 'public', title: 'Public', desc: 'Anyone with the link can access' },
-  ] as const
+  const OptionButton = ({ value, title, desc }: { value: string; title: string; desc: string }) => (
+    <button
+      onClick={() => setMode(value as typeof mode)}
+      className={`w-full p-3 rounded-lg border text-left transition-colors ${
+        mode === value
+          ? theme === 'dark' ? 'border-blue-500 bg-blue-500/10' : 'border-blue-500 bg-blue-50'
+          : theme === 'dark' ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'
+      }`}
+    >
+      <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>{title}</div>
+      <div className={`text-xs mt-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{desc}</div>
+    </button>
+  )
 
   return (
     <div className={`absolute right-0 top-full mt-1 w-80 rounded-xl shadow-lg border p-4 z-50 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <div className="space-y-4">
         <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Share Settings</div>
 
-        {/* Mode options - vertical cards */}
+        {/* Mode options with password field inline */}
         <div className="space-y-2">
-          {modeOptions.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setMode(opt.value)}
-              className={`w-full p-3 rounded-lg border text-left transition-colors ${
-                mode === opt.value
-                  ? theme === 'dark' ? 'border-blue-500 bg-blue-500/10' : 'border-blue-500 bg-blue-50'
-                  : theme === 'dark' ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>{opt.title}</div>
-              <div className={`text-xs mt-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{opt.desc}</div>
-            </button>
-          ))}
-        </div>
+          <OptionButton value="private" title="Private" desc="Only accessible when logged into Homeport" />
+          <OptionButton value="password" title="Password" desc="Anyone with the password can access" />
 
-        {/* Password field */}
-        {mode === 'password' && (
-          <div>
-            <label className={`text-xs font-medium mb-2 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Password</label>
-            <div className="relative">
+          {/* Password field - directly under Password option */}
+          {mode === 'password' && (
+            <div className="relative -mt-1">
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
@@ -1620,8 +1612,10 @@ function ShareMenu({
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-          </div>
-        )}
+          )}
+
+          <OptionButton value="public" title="Public" desc="Anyone with the link can access" />
+        </div>
 
         {/* Buttons */}
         <div className={`flex justify-end gap-2 pt-3 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-100'}`}>
