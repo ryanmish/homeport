@@ -413,14 +413,14 @@ echo "==========================================="
 # Generate cookie secret for persistent sessions
 COOKIE_SECRET=$(openssl rand -hex 32)
 
-# Create .env file
-cat > "$HOMEPORT_DIR/docker/.env" << EOF
-DOMAIN=$DOMAIN
-EXTERNAL_URL=https://$DOMAIN
-CODE_SERVER_AUTH=none
-COOKIE_SECRET=$COOKIE_SECRET
-ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH
-EOF
+# Create .env file (use printf to avoid $ interpretation in bcrypt hash)
+{
+    echo "DOMAIN=$DOMAIN"
+    echo "EXTERNAL_URL=https://$DOMAIN"
+    echo "CODE_SERVER_AUTH=none"
+    echo "COOKIE_SECRET=$COOKIE_SECRET"
+    printf 'ADMIN_PASSWORD_HASH=%s\n' "$ADMIN_PASSWORD_HASH"
+} > "$HOMEPORT_DIR/docker/.env"
 
 echo "Building Docker images (this may take a few minutes)..."
 cd "$HOMEPORT_DIR/docker"
