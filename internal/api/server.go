@@ -720,7 +720,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             height: 14px;
             border: 2px solid #e5e7eb;
             border-top-color: currentColor;
-            border-radius: 50%;
+            border-radius: 50%%;
             animation: spin 0.8s linear infinite;
         }
 
