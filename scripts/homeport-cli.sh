@@ -64,6 +64,17 @@ case "$1" in
         URL=$(echo "$STATUS" | jq -r '.config.external_url')
         echo "$URL/$2/"
         ;;
+    uninstall)
+        # Find the uninstall script
+        if [ -f ~/homeport/scripts/uninstall.sh ]; then
+            bash ~/homeport/scripts/uninstall.sh
+        elif [ -f /opt/homeport/scripts/uninstall.sh ]; then
+            bash /opt/homeport/scripts/uninstall.sh
+        else
+            echo "Could not find uninstall script. Run manually:"
+            echo "  bash ~/homeport/scripts/uninstall.sh"
+        fi
+        ;;
     *)
         echo "HOMEPORT - Mission Control CLI"
         echo ""
@@ -76,5 +87,6 @@ case "$1" in
         echo "    --password      Require access code"
         echo "  unshare <port>    Seal airlock"
         echo "  url <port>        Get docking coordinates"
+        echo "  uninstall         Decommission station"
         ;;
 esac

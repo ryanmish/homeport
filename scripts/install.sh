@@ -340,6 +340,8 @@ echo ""
 echo "Required permissions:"
 echo "  - Account > Access: Apps and Policies > Edit"
 echo "  - Account > Account Settings > Read"
+echo "  - Zone > Zone > Read"
+echo "  - Zone > DNS > Edit"
 echo ""
 read -p "Enter your Cloudflare API token (or press Enter to skip): " CF_API_TOKEN
 
@@ -356,6 +358,16 @@ if [ -n "$CF_API_TOKEN" ]; then
         ACCOUNT_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts" \
             -H "Authorization: Bearer $CF_API_TOKEN" \
             -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+        # Save config for uninstall
+        mkdir -p ~/.homeport
+        cat > ~/.homeport/config << CFGEOF
+CF_API_TOKEN=$CF_API_TOKEN
+ACCOUNT_ID=$ACCOUNT_ID
+DOMAIN=$DOMAIN
+SSH_DOMAIN=$SSH_DOMAIN
+CFGEOF
+        chmod 600 ~/.homeport/config
 
         if [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "null" ]; then
             echo -e "${YELLOW}[!]${NC} Could not get account ID. Check your API token permissions."
