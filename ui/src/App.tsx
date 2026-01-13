@@ -27,7 +27,6 @@ import {
   Moon,
   Sun,
   Settings,
-  Activity,
   AlertCircle,
   MoreHorizontal,
   Play,
