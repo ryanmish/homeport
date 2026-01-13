@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback, useRef, createContext } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { api, type Repo, type Port, type Status, type GitHubRepo } from '@/lib/api'
+import { api, type Repo, type Port, type Status, type GitHubRepo, type GitStatus, type RepoInfo, type BranchInfo, type UpdateInfo, type Process, type LogEntry, type ActivityEntry } from '@/lib/api'
 import { Logo } from '@/components/Logo'
 import {
   ExternalLink,
@@ -15,12 +14,10 @@ import {
   Lock,
   Unlock,
   KeyRound,
-  FolderGit2,
   Plus,
   Search,
   Check,
   X,
-  Command,
   Terminal,
   GitBranch,
   Share2,
@@ -29,11 +26,26 @@ import {
   Moon,
   Sun,
   Settings,
-  HelpCircle,
   Activity,
-  Clock,
   AlertCircle,
   MoreHorizontal,
+  Play,
+  Circle,
+  ArrowUp,
+  ArrowDown,
+  Pencil,
+  Filter,
+  Download,
+  Package,
+  ChevronDown,
+  RotateCcw,
+  Zap,
+  Square,
+  ScrollText,
+  Upload,
+  GitCommit,
+  History,
+  Star,
 } from 'lucide-react'
 
 // Theme context
@@ -57,6 +69,7 @@ function App() {
   const [repos, setRepos] = useState<Repo[]>([])
   const [ports, setPorts] = useState<Port[]>([])
   const [showCloneModal, setShowCloneModal] = useState(false)
+  const [showNewRepoModal, setShowNewRepoModal] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
@@ -70,6 +83,21 @@ function App() {
   })
   const [portHealth, setPortHealth] = useState<Record<number, boolean>>({})
   const [error, setError] = useState<string | null>(null)
+  const [repoFilter, setRepoFilter] = useState('')
+  const [gitStatuses, setGitStatuses] = useState<Record<string, GitStatus>>({})
+  const [showStartCommandModal, setShowStartCommandModal] = useState<Repo | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [repoInfos, setRepoInfos] = useState<Record<string, RepoInfo>>({})
+  const [dismissedUpdate, setDismissedUpdate] = useState(false)
+  const [processes, setProcesses] = useState<Process[]>([])
+  const [showLogsModal, setShowLogsModal] = useState<Repo | null>(null)
+  const [showCommitModal, setShowCommitModal] = useState<Repo | null>(null)
+  const [activity, setActivity] = useState<ActivityEntry[]>([])
+  const [showActivityPanel, setShowActivityPanel] = useState(false)
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('homeport_favorites')
+    return saved ? new Set(JSON.parse(saved)) : new Set()
+  })
 
   const toggleTheme = useCallback(() => {
     setTheme(prev => {
@@ -93,14 +121,16 @@ function App() {
 
   const fetchData = async () => {
     try {
-      const [statusData, reposData, portsData] = await Promise.all([
+      const [statusData, reposData, portsData, processesData] = await Promise.all([
         api.getStatus(),
         api.getRepos(),
         api.getPorts(),
+        api.getProcesses().catch(() => []),
       ])
       setStatus(statusData)
       setRepos(reposData)
       setPorts(portsData)
+      setProcesses(processesData)
       setError(null)
 
       // Check port health
@@ -114,6 +144,34 @@ function App() {
         }
       }
       setPortHealth(health)
+
+      // Fetch git status and repo info for all repos
+      const statuses: Record<string, GitStatus> = {}
+      const infos: Record<string, RepoInfo> = {}
+      await Promise.all(
+        reposData.map(async (repo) => {
+          try {
+            const [status, info] = await Promise.all([
+              api.getRepoStatus(repo.id),
+              api.getRepoInfo(repo.id),
+            ])
+            statuses[repo.id] = status
+            infos[repo.id] = info
+          } catch {
+            // Ignore errors for individual repos
+          }
+        })
+      )
+      setGitStatuses(statuses)
+      setRepoInfos(infos)
+
+      // Fetch activity log
+      try {
+        const activityData = await api.getActivity(20)
+        setActivity(activityData)
+      } catch {
+        // Ignore activity fetch errors
+      }
     } catch (err) {
       console.error('Failed to fetch data:', err)
       setError('Failed to connect to Homeport daemon')
@@ -126,6 +184,11 @@ function App() {
     fetchData()
     const interval = setInterval(fetchData, 5000)
     return () => clearInterval(interval)
+  }, [])
+
+  // Check for updates on mount (once per session)
+  useEffect(() => {
+    api.checkForUpdates().then(setUpdateInfo).catch(() => {})
   }, [])
 
   // Keyboard shortcuts
@@ -147,6 +210,7 @@ function App() {
       if (e.key === 'Escape') {
         setShowCommandPalette(false)
         setShowCloneModal(false)
+        setShowNewRepoModal(false)
         setShowHelpModal(false)
         setShowSettingsModal(false)
       }
@@ -195,17 +259,160 @@ function App() {
     }
   }
 
+  const handlePullRepo = async (repo: Repo) => {
+    try {
+      const result = await api.pullRepo(repo.id)
+      if (result.success) {
+        if (result.message === 'Already up to date') {
+          addToast(`${repo.name}: Already up to date`)
+        } else {
+          addToast(`${repo.name}: ${result.files_changed} files changed (+${result.insertions}/-${result.deletions})`)
+        }
+      } else {
+        addToast(`${repo.name}: ${result.message}`, 'error')
+      }
+      fetchData()
+    } catch (err) {
+      addToast(`Failed to pull ${repo.name}`, 'error')
+    }
+  }
+
   const handlePullAll = async () => {
     addToast('Pulling all repositories...', 'info')
+    let updated = 0
+    let upToDate = 0
+    let failed = 0
     for (const repo of repos) {
       try {
-        await api.pullRepo(repo.id)
+        const result = await api.pullRepo(repo.id)
+        if (result.success) {
+          if (result.message === 'Already up to date') {
+            upToDate++
+          } else {
+            updated++
+          }
+        } else {
+          failed++
+        }
       } catch (err) {
-        console.error(`Failed to pull ${repo.name}:`, err)
+        failed++
       }
     }
-    addToast('All repositories updated')
+    if (failed > 0) {
+      addToast(`Pull complete: ${updated} updated, ${upToDate} up to date, ${failed} failed`, 'error')
+    } else {
+      addToast(`Pull complete: ${updated} updated, ${upToDate} already up to date`)
+    }
+    fetchData()
   }
+
+  const handleUpdateStartCommand = async (repo: Repo, command: string) => {
+    try {
+      await api.updateRepo(repo.id, { start_command: command })
+      addToast(`Start command updated for ${repo.name}`)
+      fetchData()
+    } catch (err) {
+      addToast('Failed to update start command', 'error')
+    }
+  }
+
+  const handleExecCommand = async (repo: Repo, command: 'install' | 'fetch' | 'reset') => {
+    const commandNames = { install: 'Installing dependencies', fetch: 'Fetching updates', reset: 'Resetting changes' }
+    addToast(`${commandNames[command]}...`, 'info')
+    try {
+      const result = await api.execCommand(repo.id, command)
+      if (result.success) {
+        addToast(`${repo.name}: ${command} completed`)
+      } else {
+        addToast(`${repo.name}: ${command} failed`, 'error')
+      }
+      fetchData()
+    } catch (err) {
+      addToast(`Failed to run ${command}`, 'error')
+    }
+  }
+
+  const handleCheckoutBranch = async (repo: Repo, branch: string) => {
+    try {
+      await api.checkoutBranch(repo.id, branch)
+      addToast(`Switched to ${branch}`)
+      fetchData()
+    } catch (err) {
+      addToast(`Failed to checkout ${branch}`, 'error')
+    }
+  }
+
+  const handleStartProcess = async (repo: Repo) => {
+    try {
+      await api.startProcess(repo.id)
+      addToast(`Started ${repo.name}`)
+      fetchData()
+    } catch (err) {
+      addToast(`Failed to start: ${err}`, 'error')
+    }
+  }
+
+  const handleStopProcess = async (repo: Repo) => {
+    try {
+      await api.stopProcess(repo.id)
+      addToast(`Stopped ${repo.name}`)
+      fetchData()
+    } catch (err) {
+      addToast(`Failed to stop`, 'error')
+    }
+  }
+
+  const handleGitCommit = async (repo: Repo, message: string) => {
+    try {
+      const result = await api.gitCommit(repo.id, message)
+      if (result.success) {
+        addToast(`Committed: ${result.commit_hash}`)
+      } else {
+        addToast(result.message, 'info')
+      }
+      fetchData()
+    } catch (err) {
+      addToast('Commit failed', 'error')
+    }
+  }
+
+  const handleGitPush = async (repo: Repo) => {
+    try {
+      const result = await api.gitPush(repo.id)
+      addToast(result.message)
+      fetchData()
+    } catch (err) {
+      addToast('Push failed', 'error')
+    }
+  }
+
+  const toggleFavorite = (repoId: string) => {
+    setFavorites(prev => {
+      const next = new Set(prev)
+      if (next.has(repoId)) {
+        next.delete(repoId)
+      } else {
+        next.add(repoId)
+      }
+      localStorage.setItem('homeport_favorites', JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  // Get process by repo ID
+  const processByRepo = processes.reduce((acc, proc) => {
+    acc[proc.repo_id] = proc
+    return acc
+  }, {} as Record<string, Process>)
+
+  // Sort repos: favorites first, then by name
+  const sortedRepos = [...repos].sort((a, b) => {
+    const aFav = favorites.has(a.id)
+    const bFav = favorites.has(b.id)
+    if (aFav && !bFav) return -1
+    if (!aFav && bFav) return 1
+    return a.name.localeCompare(b.name)
+  })
 
   // Group ports by repo
   const portsByRepo = ports.reduce((acc, port) => {
@@ -262,58 +469,102 @@ function App() {
           ))}
         </div>
 
-        {/* Header */}
-        <header className={`sticky top-0 z-40 border-b transition-colors ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${theme === 'dark' ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`}>
-                <Logo size={20} />
-              </div>
-              <h1 className="text-base sm:text-lg font-semibold">Homeport</h1>
-              <Badge variant="outline" className="font-mono text-xs hidden sm:inline-flex">
-                {status?.version}
-              </Badge>
-              <span className={`text-xs hidden md:inline-flex items-center gap-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                <Clock className="h-3 w-3" />
-                {status?.uptime}
+        {/* Update notification banner */}
+        {updateInfo?.update_available && !dismissedUpdate && (
+          <div className={`border-b px-4 py-2 flex items-center justify-between ${theme === 'dark' ? 'bg-blue-900/20 border-blue-800/30' : 'bg-blue-50 border-blue-100'}`}>
+            <div className="flex items-center gap-2">
+              <Download className={`h-4 w-4 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
+              <span className={`text-sm ${theme === 'dark' ? 'text-blue-300' : 'text-blue-700'}`}>
+                Homeport {updateInfo.latest_version} is available
               </span>
             </div>
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-2">
+              {updateInfo.release_url && (
+                <a
+                  href={updateInfo.release_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`text-sm font-medium ${theme === 'dark' ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
+                >
+                  View Release
+                </a>
+              )}
               <button
-                onClick={toggleTheme}
-                className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
-                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                onClick={() => setDismissedUpdate(true)}
+                className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-blue-800/30' : 'hover:bg-blue-100'}`}
               >
-                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                <X className={`h-4 w-4 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
               </button>
-              <button
-                onClick={() => setShowHelpModal(true)}
-                className={`p-2 rounded-lg transition-colors hidden sm:block ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
-                title="Keyboard shortcuts (?)"
-              >
-                <HelpCircle className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => setShowSettingsModal(true)}
-                className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
-                title="Settings"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Header */}
+        <header className={`sticky top-0 z-40 border-b backdrop-blur-sm transition-colors ${theme === 'dark' ? 'bg-gray-900/95 border-gray-800' : 'bg-white/95 border-gray-200'}`}>
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+            {/* Logo and brand */}
+            <div className="flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-sm ${theme === 'dark' ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`}>
+                <Logo size={20} />
+              </div>
+              <div className="flex flex-col">
+                <h1 className="text-base font-semibold leading-tight">Homeport</h1>
+                <span className={`text-xs font-mono ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                  v{status?.version}
+                </span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center">
+              {/* Search/Command palette trigger */}
               <button
                 onClick={() => setShowCommandPalette(true)}
-                className={`items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors hidden sm:flex ${theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                className={`hidden sm:flex items-center gap-2 h-9 px-3 mr-3 text-sm rounded-lg border transition-colors ${theme === 'dark' ? 'bg-gray-800/50 border-gray-700 text-gray-400 hover:bg-gray-800 hover:border-gray-600' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100 hover:border-gray-300'}`}
               >
-                <Command className="h-3 w-3" />
-                <span>K</span>
+                <Search className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">Search...</span>
+                <kbd className={`hidden md:inline ml-2 px-1.5 py-0.5 text-xs rounded ${theme === 'dark' ? 'bg-gray-700 text-gray-400' : 'bg-gray-200 text-gray-500'}`}>
+                  ⌘K
+                </kbd>
               </button>
-              <Button onClick={() => setShowCloneModal(true)} size="sm" className="hidden sm:flex">
-                <Plus className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Clone Repo</span>
-              </Button>
-              <Button onClick={() => setShowCloneModal(true)} size="sm" className="sm:hidden p-2">
-                <Plus className="h-4 w-4" />
-              </Button>
+
+              {/* Icon buttons */}
+              <div className={`flex items-center border-r pr-2 mr-2 ${theme === 'dark' ? 'border-gray-800' : 'border-gray-200'}`}>
+                <button
+                  onClick={() => setShowActivityPanel(!showActivityPanel)}
+                  className={`p-2 rounded-lg transition-colors ${showActivityPanel ? theme === 'dark' ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700' : theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                  title="Activity log"
+                >
+                  <History className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={toggleTheme}
+                  className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                  title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </button>
+                <button
+                  onClick={() => setShowSettingsModal(true)}
+                  className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                  title="Settings"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Primary actions */}
+              <div className="flex items-center gap-1.5">
+                <Button variant="outline" size="sm" onClick={() => setShowNewRepoModal(true)}>
+                  <Plus className="h-4 w-4 sm:mr-1.5" />
+                  <span className="hidden sm:inline">New</span>
+                </Button>
+                <Button size="sm" onClick={() => setShowCloneModal(true)}>
+                  <Github className="h-4 w-4 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Clone</span>
+                </Button>
+              </div>
             </div>
           </div>
         </header>
@@ -348,12 +599,24 @@ function App() {
 
           {/* Repos */}
           <section className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <h2 className={`text-sm sm:text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
                 Repositories
               </h2>
-              <div className="flex items-center gap-2">
-                <span className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
+              <div className="flex items-center gap-2 flex-1 justify-end">
+                {repos.length > 3 && (
+                  <div className="relative max-w-xs flex-1">
+                    <Filter className={`absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
+                    <input
+                      type="text"
+                      placeholder="Filter..."
+                      value={repoFilter}
+                      onChange={(e) => setRepoFilter(e.target.value)}
+                      className={`w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-100 focus:ring-gray-600 placeholder-gray-500' : 'border-gray-200 focus:ring-gray-400 placeholder-gray-400'}`}
+                    />
+                  </div>
+                )}
+                <span className={`text-xs sm:text-sm whitespace-nowrap ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
                   {repos.length} repos
                 </span>
                 {repos.length > 0 && (
@@ -366,36 +629,55 @@ function App() {
             </div>
 
             {repos.length === 0 ? (
-              <EmptyState
-                icon={<FolderGit2 className="h-12 w-12" />}
-                title="No repositories yet"
-                description="Clone a repository to get started with your development environment."
-                action={
-                  <Button variant="outline" onClick={() => setShowCloneModal(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Clone your first repo
-                  </Button>
-                }
-                theme={theme}
-              />
+              <Card className={theme === 'dark' ? 'bg-gray-900 border-gray-800' : ''}>
+                <CardContent className="py-10">
+                  <div className="text-center space-y-4">
+                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Get started by cloning an existing repository or creating a new one.
+                    </p>
+                    <div className="flex items-center justify-center gap-3">
+                      <Button onClick={() => setShowCloneModal(true)}>
+                        <Github className="h-4 w-4 mr-2" />
+                        Clone Repository
+                      </Button>
+                      <Button variant="outline" onClick={() => setShowNewRepoModal(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Repository
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             ) : (
               <div className="space-y-3">
-                {repos.map((repo) => (
+                {sortedRepos
+                  .filter(repo => !repoFilter || repo.name.toLowerCase().includes(repoFilter.toLowerCase()))
+                  .map((repo) => (
                   <RepoCard
                     key={repo.id}
                     repo={repo}
                     ports={portsByRepo[repo.id] || []}
                     portHealth={portHealth}
+                    gitStatus={gitStatuses[repo.id]}
+                    repoInfo={repoInfos[repo.id]}
+                    process={processByRepo[repo.id]}
+                    isFavorite={favorites.has(repo.id)}
                     theme={theme}
                     onDelete={() => handleDeleteRepo(repo)}
-                    onPull={() => {
-                      api.pullRepo(repo.id)
-                      addToast('Pulling latest changes...')
-                    }}
+                    onPull={() => handlePullRepo(repo)}
                     onCopyUrl={copyUrl}
                     onCopyCurl={copyCurl}
                     onOpenPort={openPort}
                     onShare={handleShare}
+                    onConfigureStart={() => setShowStartCommandModal(repo)}
+                    onExecCommand={(cmd) => handleExecCommand(repo, cmd)}
+                    onCheckoutBranch={(branch) => handleCheckoutBranch(repo, branch)}
+                    onStartProcess={() => handleStartProcess(repo)}
+                    onStopProcess={() => handleStopProcess(repo)}
+                    onShowLogs={() => setShowLogsModal(repo)}
+                    onCommit={() => setShowCommitModal(repo)}
+                    onPush={() => handleGitPush(repo)}
+                    onToggleFavorite={() => toggleFavorite(repo.id)}
                     addToast={addToast}
                   />
                 ))}
@@ -403,30 +685,30 @@ function App() {
             )}
           </section>
 
-          {/* Orphan Ports */}
-          {orphanPorts.length > 0 && (
-            <section className="space-y-4">
-              <h2 className={`text-sm sm:text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
-                Other Ports
-              </h2>
-              <Card className={theme === 'dark' ? 'bg-gray-900 border-gray-800' : ''}>
-                <CardContent className="pt-4 space-y-2">
-                  {orphanPorts.map((port) => (
-                    <PortRow
-                      key={port.port}
-                      port={port}
-                      isHealthy={portHealth[port.port]}
-                      theme={theme}
-                      onCopy={() => copyUrl(port.port)}
-                      onCopyCurl={() => copyCurl(port.port)}
-                      onOpen={() => openPort(port.port)}
-                      onShare={handleShare}
-                    />
-                  ))}
-                </CardContent>
-              </Card>
-            </section>
-          )}
+          {/* External Services - filtered to exclude homeportd */}
+          {(() => {
+            const externalPorts = orphanPorts.filter(p => p.process_name !== 'homeportd')
+            if (externalPorts.length === 0) return null
+            return (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <h2 className={`text-sm sm:text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
+                    External Services
+                  </h2>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${theme === 'dark' ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-500'}`}>
+                    Read-only
+                  </span>
+                </div>
+                <Card className={`${theme === 'dark' ? 'bg-gray-900/50 border-gray-800' : 'bg-gray-50/50'}`}>
+                  <CardContent className="pt-4 space-y-1">
+                    {externalPorts.map((port) => (
+                      <ExternalPortRow key={port.port} port={port} theme={theme} />
+                    ))}
+                  </CardContent>
+                </Card>
+              </section>
+            )
+          })()}
         </main>
 
         {/* Modals */}
@@ -473,11 +755,140 @@ function App() {
             theme={theme}
             status={status}
             onClose={() => setShowSettingsModal(false)}
+            onToggleTheme={toggleTheme}
           />
+        )}
+
+        {showNewRepoModal && (
+          <NewRepoModal
+            theme={theme}
+            onClose={() => setShowNewRepoModal(false)}
+            onCreate={async (name) => {
+              await api.initRepo(name)
+              addToast(`Created ${name}`)
+              fetchData()
+            }}
+            addToast={addToast}
+          />
+        )}
+
+        {showStartCommandModal && (
+          <StartCommandModal
+            theme={theme}
+            repo={showStartCommandModal}
+            repoInfo={repoInfos[showStartCommandModal.id]}
+            onClose={() => setShowStartCommandModal(null)}
+            onSave={(command) => handleUpdateStartCommand(showStartCommandModal, command)}
+          />
+        )}
+
+        {showLogsModal && (
+          <LogsModal
+            theme={theme}
+            repo={showLogsModal}
+            onClose={() => setShowLogsModal(null)}
+          />
+        )}
+
+        {showCommitModal && (
+          <CommitModal
+            theme={theme}
+            repo={showCommitModal}
+            onClose={() => setShowCommitModal(null)}
+            onCommit={(message) => handleGitCommit(showCommitModal, message)}
+          />
+        )}
+
+        {/* Activity Panel (slide-out) */}
+        {showActivityPanel && (
+          <div className="fixed inset-0 z-50" onClick={() => setShowActivityPanel(false)}>
+            <div className="absolute inset-0 bg-black/20" />
+            <div
+              className={`absolute right-0 top-0 h-full w-80 shadow-2xl border-l overflow-hidden animate-in slide-in-from-right duration-200 ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`p-4 border-b flex items-center justify-between ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+                <h2 className={`font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Activity</h2>
+                <button
+                  onClick={() => setShowActivityPanel(false)}
+                  className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="overflow-y-auto h-full pb-20">
+                {activity.length === 0 ? (
+                  <div className={`p-4 text-center text-sm ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                    No activity yet
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {activity.map((entry) => (
+                      <div key={entry.id} className={`p-3 ${theme === 'dark' ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}>
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-0.5 p-1.5 rounded-lg ${getActivityColor(entry.type, theme)}`}>
+                            {getActivityIcon(entry.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
+                              {entry.message}
+                            </p>
+                            {entry.repo_name && (
+                              <p className={`text-xs truncate ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                                {entry.repo_name}
+                              </p>
+                            )}
+                            {entry.port && entry.port > 0 && (
+                              <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                                Port {entry.port}
+                              </p>
+                            )}
+                            <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}`}>
+                              {formatRelativeTime(entry.timestamp)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </ThemeContext.Provider>
   )
+}
+
+function getActivityIcon(type: string) {
+  switch (type) {
+    case 'clone': return <Download className="h-3 w-3" />
+    case 'delete': return <Trash2 className="h-3 w-3" />
+    case 'share': return <Share2 className="h-3 w-3" />
+    case 'unshare': return <Lock className="h-3 w-3" />
+    case 'commit': return <GitCommit className="h-3 w-3" />
+    case 'push': return <Upload className="h-3 w-3" />
+    case 'pull': return <Download className="h-3 w-3" />
+    case 'start': return <Play className="h-3 w-3" />
+    case 'stop': return <Square className="h-3 w-3" />
+    default: return <History className="h-3 w-3" />
+  }
+}
+
+function getActivityColor(type: string, theme: Theme) {
+  const colors: Record<string, string> = {
+    clone: theme === 'dark' ? 'bg-green-900/30 text-green-400' : 'bg-green-50 text-green-600',
+    delete: theme === 'dark' ? 'bg-red-900/30 text-red-400' : 'bg-red-50 text-red-600',
+    share: theme === 'dark' ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600',
+    unshare: theme === 'dark' ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600',
+    commit: theme === 'dark' ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-50 text-purple-600',
+    push: theme === 'dark' ? 'bg-orange-900/30 text-orange-400' : 'bg-orange-50 text-orange-600',
+    pull: theme === 'dark' ? 'bg-cyan-900/30 text-cyan-400' : 'bg-cyan-50 text-cyan-600',
+    start: theme === 'dark' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-emerald-50 text-emerald-600',
+    stop: theme === 'dark' ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600',
+  }
+  return colors[type] || (theme === 'dark' ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600')
 }
 
 function LoadingSkeleton() {
@@ -522,33 +933,6 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
         Retry
       </Button>
     </div>
-  )
-}
-
-function EmptyState({
-  icon,
-  title,
-  description,
-  action,
-  theme
-}: {
-  icon: React.ReactNode
-  title: string
-  description: string
-  action?: React.ReactNode
-  theme: Theme
-}) {
-  return (
-    <Card className={`border-dashed ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700' : ''}`}>
-      <CardContent className="py-12 text-center">
-        <div className={`mx-auto mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>
-          {icon}
-        </div>
-        <h3 className={`font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>{title}</h3>
-        <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>{description}</p>
-        {action}
-      </CardContent>
-    </Card>
   )
 }
 
@@ -600,6 +984,10 @@ function RepoCard({
   repo,
   ports,
   portHealth,
+  gitStatus,
+  repoInfo,
+  process,
+  isFavorite,
   theme,
   onDelete,
   onPull,
@@ -607,10 +995,23 @@ function RepoCard({
   onCopyCurl,
   onOpenPort,
   onShare,
+  onConfigureStart,
+  onExecCommand,
+  onCheckoutBranch,
+  onStartProcess,
+  onStopProcess,
+  onShowLogs,
+  onCommit,
+  onPush,
+  onToggleFavorite,
 }: {
   repo: Repo
   ports: Port[]
   portHealth: Record<number, boolean>
+  gitStatus?: GitStatus
+  repoInfo?: RepoInfo
+  process?: Process
+  isFavorite: boolean
   theme: Theme
   onDelete: () => void
   onPull: () => void
@@ -618,15 +1019,41 @@ function RepoCard({
   onCopyCurl: (port: number) => void
   onOpenPort: (port: number) => void
   onShare: (port: number, mode: string, password?: string, expiresIn?: string) => void
+  onConfigureStart: () => void
+  onExecCommand: (cmd: 'install' | 'fetch' | 'reset') => void
+  onCheckoutBranch: (branch: string) => void
+  onStartProcess: () => void
+  onStopProcess: () => void
+  onShowLogs: () => void
+  onCommit: () => void
+  onPush: () => void
+  onToggleFavorite: () => void
   addToast?: (msg: string, type?: 'success' | 'error' | 'info') => void
 }) {
   const [showMenu, setShowMenu] = useState(false)
+  const [showBranchMenu, setShowBranchMenu] = useState(false)
+  const [showQuickActions, setShowQuickActions] = useState(false)
+  const [branches, setBranches] = useState<BranchInfo[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
+  const branchMenuRef = useRef<HTMLDivElement>(null)
+  const quickActionsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (showBranchMenu) {
+      api.getBranches(repo.id, true).then(setBranches).catch(() => {})
+    }
+  }, [showBranchMenu, repo.id])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setShowMenu(false)
+      }
+      if (branchMenuRef.current && !branchMenuRef.current.contains(e.target as Node)) {
+        setShowBranchMenu(false)
+      }
+      if (quickActionsRef.current && !quickActionsRef.current.contains(e.target as Node)) {
+        setShowQuickActions(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -635,38 +1062,145 @@ function RepoCard({
 
   return (
     <Card className={`overflow-hidden transition-all duration-200 hover:shadow-md ${theme === 'dark' ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'hover:shadow-lg'}`}>
-      <CardHeader className={`pb-3 ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50/50'}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              <GitBranch className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} />
+      <CardHeader className={`py-4 ${theme === 'dark' ? 'bg-gray-800/30' : 'bg-gray-50/50'}`}>
+        <div className="flex items-start justify-between gap-4">
+          {/* Left side: repo info */}
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+              <GitBranch className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} />
             </div>
-            <div className="min-w-0">
-              <CardTitle className="text-sm sm:text-base truncate">{repo.name}</CardTitle>
-              <p className={`text-xs font-mono truncate ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>{repo.path}</p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 mb-0.5">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={onToggleFavorite}
+                    className={`flex-shrink-0 transition-colors ${isFavorite ? 'text-yellow-500' : theme === 'dark' ? 'text-gray-600 hover:text-gray-400' : 'text-gray-300 hover:text-gray-400'}`}
+                    title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    <Star className={`h-4 w-4 ${isFavorite ? 'fill-current' : ''}`} />
+                  </button>
+                  <CardTitle className="text-base font-semibold truncate">{repo.name}</CardTitle>
+                </div>
+                {repo.github_url && (
+                  <a
+                    href={repo.github_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`transition-colors flex-shrink-0 ${theme === 'dark' ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    <Github className="h-4 w-4" />
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {gitStatus && (
+                  <div className="flex items-center gap-1.5">
+                    {/* Branch selector */}
+                    <div className="relative" ref={branchMenuRef}>
+                      <button
+                        onClick={() => setShowBranchMenu(!showBranchMenu)}
+                        className={`flex items-center gap-1 text-xs font-mono px-1.5 py-0.5 rounded transition-colors ${theme === 'dark' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      >
+                        {gitStatus.branch}
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                      {showBranchMenu && (
+                        <div className={`absolute left-0 top-full mt-1 w-48 max-h-64 overflow-y-auto rounded-lg shadow-lg border z-50 py-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                          {branches.length === 0 ? (
+                            <div className={`px-3 py-2 text-sm ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>Loading...</div>
+                          ) : (
+                            branches.map((branch) => (
+                              <button
+                                key={branch.name}
+                                onClick={() => { onCheckoutBranch(branch.name); setShowBranchMenu(false); }}
+                                className={`flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left ${branch.is_current ? theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100' : ''} ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                              >
+                                {branch.is_current && <Check className="h-3 w-3" />}
+                                <span className={`flex-1 truncate ${branch.is_current ? '' : 'ml-5'}`}>{branch.name}</span>
+                                {branch.is_remote && <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>remote</span>}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {gitStatus.is_dirty && (
+                      <span className={`flex items-center gap-0.5 text-xs ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`} title="Uncommitted changes">
+                        <Circle className="h-2 w-2 fill-current" />
+                      </span>
+                    )}
+                    {gitStatus.ahead > 0 && (
+                      <span className={`flex items-center gap-0.5 text-xs ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`} title={`${gitStatus.ahead} commits ahead`}>
+                        <ArrowUp className="h-3 w-3" />
+                        {gitStatus.ahead}
+                      </span>
+                    )}
+                    {gitStatus.behind > 0 && (
+                      <span className={`flex items-center gap-0.5 text-xs ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`} title={`${gitStatus.behind} commits behind`}>
+                        <ArrowDown className="h-3 w-3" />
+                        {gitStatus.behind}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {/* Needs install badge */}
+                {repoInfo?.needs_install && (
+                  <button
+                    onClick={() => onExecCommand('install')}
+                    className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded transition-colors ${theme === 'dark' ? 'bg-orange-900/30 text-orange-400 hover:bg-orange-900/50' : 'bg-orange-50 text-orange-600 hover:bg-orange-100'}`}
+                    title="Run npm install"
+                  >
+                    <Package className="h-3 w-3" />
+                    needs install
+                  </button>
+                )}
+              </div>
             </div>
-            {repo.github_url && (
-              <a
-                href={repo.github_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`transition-colors flex-shrink-0 ${theme === 'dark' ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
-              >
-                <Github className="h-4 w-4" />
-              </a>
-            )}
           </div>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <Button variant="ghost" size="sm" onClick={onPull} className="hidden sm:flex">
+
+          {/* Right side: actions */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Quick actions menu */}
+            <div className="relative hidden sm:block" ref={quickActionsRef}>
+              <Button variant="ghost" size="sm" onClick={() => setShowQuickActions(!showQuickActions)} className="h-8 w-8 p-0" title="Quick actions">
+                <Zap className="h-4 w-4" />
+              </Button>
+              {showQuickActions && (
+                <div className={`absolute right-0 top-full mt-1 w-40 rounded-lg shadow-lg border z-50 py-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                  <button
+                    onClick={() => { onExecCommand('install'); setShowQuickActions(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  >
+                    <Package className="h-4 w-4" />
+                    Install deps
+                  </button>
+                  <button
+                    onClick={() => { onExecCommand('fetch'); setShowQuickActions(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  >
+                    <Download className="h-4 w-4" />
+                    Git fetch
+                  </button>
+                  <button
+                    onClick={() => { onExecCommand('reset'); setShowQuickActions(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset HEAD
+                  </button>
+                </div>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" onClick={onPull} className="hidden sm:flex h-8 w-8 p-0" title="Pull latest">
               <RefreshCw className="h-4 w-4" />
             </Button>
             <a href={`/code/?folder=${repo.path}`} target="_blank" rel="noopener noreferrer" className="hidden sm:block">
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="h-8">
                 Open in VS Code
               </Button>
             </a>
             <div className="relative" ref={menuRef}>
-              <Button variant="ghost" size="sm" onClick={() => setShowMenu(!showMenu)} className="p-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowMenu(!showMenu)} className="h-8 w-8 p-0">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
               {showMenu && (
@@ -686,6 +1220,62 @@ function RepoCard({
                   >
                     <RefreshCw className="h-4 w-4" />
                     Pull Latest
+                  </button>
+                  {/* Process controls */}
+                  {repo.start_command && (
+                    process?.status === 'running' ? (
+                      <>
+                        <button
+                          onClick={() => { onStopProcess(); setShowMenu(false); }}
+                          className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                        >
+                          <Square className="h-4 w-4" />
+                          Stop Server
+                        </button>
+                        <button
+                          onClick={() => { onShowLogs(); setShowMenu(false); }}
+                          className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                        >
+                          <ScrollText className="h-4 w-4" />
+                          View Logs
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => { onStartProcess(); setShowMenu(false); }}
+                        className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                      >
+                        <Play className="h-4 w-4" />
+                        Start Server
+                      </button>
+                    )
+                  )}
+                  {/* Git operations */}
+                  {gitStatus?.is_dirty && (
+                    <button
+                      onClick={() => { onCommit(); setShowMenu(false); }}
+                      className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    >
+                      <GitCommit className="h-4 w-4" />
+                      Commit Changes
+                    </button>
+                  )}
+                  {gitStatus && gitStatus.ahead > 0 && (
+                    <button
+                      onClick={() => { onPush(); setShowMenu(false); }}
+                      className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    >
+                      <Upload className="h-4 w-4" />
+                      Push Changes
+                    </button>
+                  )}
+                  <div className={`my-1 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} />
+                  <button
+                    onClick={() => { onConfigureStart(); setShowMenu(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Configure Start Command
                   </button>
                   <button
                     onClick={() => { onDelete(); setShowMenu(false); }}
@@ -717,7 +1307,22 @@ function RepoCard({
             ))}
           </div>
         ) : (
-          <p className={`text-sm py-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>No dev servers running</p>
+          <div className={`flex items-center justify-between py-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+            <p className="text-sm">
+              {repo.start_command ? 'No dev servers running' : 'No start command configured'}
+            </p>
+            {repo.start_command ? (
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => window.open(`/code/?folder=${repo.path}`, '_blank')}>
+                <Play className="h-3 w-3 mr-1" />
+                Open Terminal
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onConfigureStart}>
+                <Pencil className="h-3 w-3 mr-1" />
+                Configure
+              </Button>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -777,8 +1382,11 @@ function PortRow({
         <code className={`text-xs sm:text-sm font-mono font-medium px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border flex-shrink-0 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-200 text-gray-900'}`}>
           :{port.port}
         </code>
-        <span className={`text-xs sm:text-sm truncate ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-          {port.process_name || 'Unknown'}
+        <span
+          className={`text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[200px] ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
+          title={port.command || port.process_name || 'Unknown'}
+        >
+          {port.command ? port.command.split('/').pop()?.split(' ')[0] : port.process_name || 'Unknown'}
         </span>
         <div className={`hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${modeColors[port.share_mode]}`}>
           <ShareIcon className="h-3 w-3" />
@@ -843,6 +1451,25 @@ function PortRow({
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ExternalPortRow({ port, theme }: { port: Port; theme: Theme }) {
+  return (
+    <div className={`flex items-center justify-between py-2 px-3 rounded-lg ${theme === 'dark' ? 'bg-gray-800/30' : 'bg-gray-100/50'}`}>
+      <div className="flex items-center gap-3">
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${theme === 'dark' ? 'bg-gray-600' : 'bg-gray-400'}`} />
+        <code className={`text-xs font-mono px-1.5 py-0.5 rounded ${theme === 'dark' ? 'bg-gray-800 text-gray-500' : 'bg-gray-200 text-gray-500'}`}>
+          :{port.port}
+        </code>
+        <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
+          {port.process_name || 'Unknown'}
+        </span>
+      </div>
+      <span className={`text-xs ${theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}`}>
+        External
+      </span>
     </div>
   )
 }
@@ -1069,11 +1696,6 @@ function CloneModal({
             </div>
           )}
         </div>
-        <div className={`p-3 border-t ${theme === 'dark' ? 'border-gray-800 bg-gray-800/50' : 'border-gray-100 bg-gray-50'}`}>
-          <p className={`text-xs text-center ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
-            Press <kbd className={`px-1.5 py-0.5 rounded ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-white border border-gray-200 text-gray-600'}`}>Esc</kbd> to close
-          </p>
-        </div>
       </div>
     </div>
   )
@@ -1234,29 +1856,29 @@ function CommandPalette({
 
 function HelpModal({ theme, onClose }: { theme: Theme; onClose: () => void }) {
   const shortcuts = [
-    { keys: ['Cmd', 'K'], description: 'Open command palette' },
+    { keys: ['⌘', 'K'], description: 'Open command palette' },
     { keys: ['?'], description: 'Show keyboard shortcuts' },
     { keys: ['Esc'], description: 'Close modal / cancel' },
   ]
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[10vh] z-50 px-4" onClick={onClose}>
       <div
         className={`rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={`px-6 py-4 border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
-          <h2 className={`text-lg font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Keyboard Shortcuts</h2>
+        <div className={`p-4 border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+          <h2 className={`text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Keyboard Shortcuts</h2>
         </div>
-        <div className="px-6 py-4 space-y-3">
+        <div className="p-4 space-y-3">
           {shortcuts.map((shortcut, i) => (
-            <div key={i} className="flex items-center justify-between">
-              <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>{shortcut.description}</span>
+            <div key={i} className={`flex items-center justify-between p-3 rounded-lg ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
+              <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>{shortcut.description}</span>
               <div className="flex items-center gap-1">
                 {shortcut.keys.map((key, j) => (
                   <kbd
                     key={j}
-                    className={`px-2 py-1 text-xs font-mono rounded ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-100 border border-gray-200 text-gray-600'}`}
+                    className={`px-2 py-1 text-xs font-mono rounded ${theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-white border border-gray-200 text-gray-600'}`}
                   >
                     {key}
                   </kbd>
@@ -1264,11 +1886,6 @@ function HelpModal({ theme, onClose }: { theme: Theme; onClose: () => void }) {
               </div>
             </div>
           ))}
-        </div>
-        <div className={`px-6 py-3 border-t ${theme === 'dark' ? 'border-gray-800 bg-gray-800/50' : 'border-gray-100 bg-gray-50'}`}>
-          <Button variant="outline" onClick={onClose} className="w-full">
-            Close
-          </Button>
         </div>
       </div>
     </div>
@@ -1278,55 +1895,465 @@ function HelpModal({ theme, onClose }: { theme: Theme; onClose: () => void }) {
 function SettingsModal({
   theme,
   status,
-  onClose
+  onClose,
+  onToggleTheme
 }: {
   theme: Theme
   status: Status | null
   onClose: () => void
+  onToggleTheme: () => void
 }) {
+  const [githubStatus, setGithubStatus] = useState<{
+    authenticated: boolean
+    user?: { login: string; name: string; email: string; avatarUrl: string }
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.getGitHubStatus()
+      .then(setGithubStatus)
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[10vh] z-50 px-4" onClick={onClose}>
       <div
         className={`rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={`px-6 py-4 border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
-          <h2 className={`text-lg font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Settings</h2>
+        <div className={`p-4 border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+          <h2 className={`text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Settings</h2>
         </div>
-        <div className="px-6 py-4 space-y-4">
-          <div>
-            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>External URL</label>
-            <p className={`text-sm mt-1 font-mono ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-              {status?.config.external_url || 'Not set'}
-            </p>
-          </div>
-          <div>
-            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Port Range</label>
-            <p className={`text-sm mt-1 font-mono ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-              {status?.config.port_range || 'Not set'}
-            </p>
-          </div>
-          <div>
-            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Mode</label>
-            <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-              {status?.config.dev_mode ? 'Development' : 'Production'}
-            </p>
-          </div>
-          <div>
-            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Version</label>
-            <p className={`text-sm mt-1 font-mono ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-              {status?.version}
-            </p>
+        <div className="max-h-[60vh] overflow-y-auto">
+          <div className="p-4 space-y-4">
+            {/* GitHub Account */}
+            <div>
+              <label className={`text-xs font-medium uppercase tracking-wide ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                GitHub Account
+              </label>
+              {loading ? (
+                <div className={`mt-2 h-16 rounded-lg animate-pulse ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'}`} />
+              ) : githubStatus?.authenticated && githubStatus.user ? (
+                <a
+                  href={`https://github.com/${githubStatus.user.login}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`mt-2 flex items-center gap-3 p-3 rounded-lg transition-colors ${theme === 'dark' ? 'bg-gray-800/50 hover:bg-gray-800' : 'bg-gray-50 hover:bg-gray-100'}`}
+                >
+                  <img
+                    src={githubStatus.user.avatarUrl}
+                    alt={githubStatus.user.login}
+                    className="w-10 h-10 rounded-full"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-medium truncate ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
+                      {githubStatus.user.name || githubStatus.user.login}
+                    </p>
+                    <p className={`text-sm truncate ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                      @{githubStatus.user.login}
+                    </p>
+                  </div>
+                  <ExternalLink className={`h-4 w-4 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
+                </a>
+              ) : (
+                <div className={`mt-2 p-3 rounded-lg text-sm ${theme === 'dark' ? 'bg-gray-800/50 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
+                  Not connected. Run <code className={`px-1 py-0.5 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`}>gh auth login</code> to connect.
+                </div>
+              )}
+            </div>
+
+            {/* Appearance */}
+            <div>
+              <label className={`text-xs font-medium uppercase tracking-wide ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                Appearance
+              </label>
+              <div className={`mt-2 divide-y rounded-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-800/50 divide-gray-700/50' : 'bg-gray-50 divide-gray-100'}`}>
+                <button
+                  onClick={onToggleTheme}
+                  className={`w-full flex items-center justify-between p-3 transition-colors ${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    {theme === 'dark' ? <Moon className="h-4 w-4 text-gray-400" /> : <Sun className="h-4 w-4 text-gray-500" />}
+                    <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Theme</span>
+                  </div>
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {theme === 'dark' ? 'Dark' : 'Light'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Server Info */}
+            <div>
+              <label className={`text-xs font-medium uppercase tracking-wide ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                Server
+              </label>
+              <div className={`mt-2 divide-y rounded-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-800/50 divide-gray-700/50' : 'bg-gray-50 divide-gray-100'}`}>
+                <div className="flex justify-between p-3">
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>External URL</span>
+                  <span className={`text-sm font-mono ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
+                    {status?.config.external_url || 'localhost'}
+                  </span>
+                </div>
+                <div className="flex justify-between p-3">
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Port Range</span>
+                  <span className={`text-sm font-mono ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
+                    {status?.config.port_range || '3000-9999'}
+                  </span>
+                </div>
+                <div className="flex justify-between p-3">
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Mode</span>
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
+                    {status?.config.dev_mode ? 'Development' : 'Production'}
+                  </span>
+                </div>
+                <div className="flex justify-between p-3">
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Version</span>
+                  <span className={`text-sm font-mono ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
+                    {status?.version}
+                  </span>
+                </div>
+                <div className="flex justify-between p-3">
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Uptime</span>
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
+                    {status?.uptime}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div className={`px-6 py-3 border-t ${theme === 'dark' ? 'border-gray-800 bg-gray-800/50' : 'border-gray-100 bg-gray-50'}`}>
-          <p className={`text-xs text-center mb-3 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
-            Settings are configured via environment variables and config files.
-          </p>
-          <Button variant="outline" onClick={onClose} className="w-full">
-            Close
+      </div>
+    </div>
+  )
+}
+
+function NewRepoModal({
+  theme,
+  onClose,
+  onCreate,
+  addToast
+}: {
+  theme: Theme
+  onClose: () => void
+  onCreate: (name: string) => Promise<void>
+  addToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
+  const [name, setName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
+
+    setCreating(true)
+    try {
+      await onCreate(name.trim())
+      onClose()
+    } catch (err) {
+      addToast('Failed to create repository', 'error')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[10vh] z-50 px-4" onClick={onClose}>
+      <div
+        className={`rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <form onSubmit={handleSubmit}>
+          <div className={`p-4 border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+            <h2 className={`text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>New Repository</h2>
+          </div>
+          <div className="p-4">
+            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              Repository Name
+            </label>
+            <input
+              ref={inputRef}
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="my-project"
+              pattern="[a-zA-Z0-9_-]+"
+              className={`mt-2 w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-100 focus:ring-gray-600' : 'border-gray-200 focus:ring-gray-900'}`}
+            />
+            <p className={`mt-2 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+              Only letters, numbers, dashes, and underscores allowed.
+            </p>
+          </div>
+          <div className={`p-4 pt-0 flex gap-2`}>
+            <Button type="submit" disabled={!name.trim() || creating} className="flex-1">
+              {creating ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Create Repository'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function StartCommandModal({
+  theme,
+  repo,
+  repoInfo,
+  onClose,
+  onSave
+}: {
+  theme: Theme
+  repo: Repo
+  repoInfo?: RepoInfo
+  onClose: () => void
+  onSave: (command: string) => void
+}) {
+  const [command, setCommand] = useState(repo.start_command || repoInfo?.detected_command || '')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(command)
+    onClose()
+  }
+
+  // Build quick select commands from available scripts + common ones
+  const quickCommands: string[] = []
+
+  // Add detected command first if available
+  if (repoInfo?.detected_command) {
+    quickCommands.push(repoInfo.detected_command)
+  }
+
+  // Add package.json scripts (formatted for package manager)
+  if (repoInfo?.available_scripts) {
+    const pm = repoInfo.package_manager || 'npm'
+    const scripts = Object.keys(repoInfo.available_scripts)
+    for (const script of scripts.slice(0, 6)) {
+      const cmd = script === 'start'
+        ? `${pm} start`
+        : `${pm} run ${script}`
+      if (!quickCommands.includes(cmd)) {
+        quickCommands.push(cmd)
+      }
+    }
+  }
+
+  // Fallback common commands if no scripts detected
+  if (quickCommands.length === 0) {
+    quickCommands.push('npm run dev', 'npm start', 'yarn dev', 'pnpm dev', 'bun dev')
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[10vh] z-50 px-4" onClick={onClose}>
+      <div
+        className={`rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <form onSubmit={handleSubmit}>
+          <div className={`p-4 border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+            <h2 className={`text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Start Command</h2>
+            <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{repo.name}</p>
+          </div>
+          <div className="p-4 space-y-4">
+            {/* Detected command suggestion */}
+            {repoInfo?.detected_command && !repo.start_command && (
+              <div className={`flex items-center gap-2 p-2 rounded-lg ${theme === 'dark' ? 'bg-green-900/20 border border-green-800/30' : 'bg-green-50 border border-green-100'}`}>
+                <Zap className={`h-4 w-4 ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`} />
+                <span className={`text-sm ${theme === 'dark' ? 'text-green-300' : 'text-green-700'}`}>
+                  Detected: <code className="font-mono">{repoInfo.detected_command}</code>
+                </span>
+              </div>
+            )}
+            <div>
+              <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                Command
+              </label>
+              <input
+                ref={inputRef}
+                type="text"
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                placeholder="npm run dev"
+                className={`mt-2 w-full px-3 py-2.5 text-sm font-mono border rounded-lg focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-100 focus:ring-gray-600' : 'border-gray-200 focus:ring-gray-900'}`}
+              />
+            </div>
+            <div>
+              <label className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                {repoInfo?.available_scripts ? 'From package.json' : 'Quick select'}
+              </label>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {quickCommands.slice(0, 6).map(cmd => (
+                  <button
+                    key={cmd}
+                    type="button"
+                    onClick={() => setCommand(cmd)}
+                    className={`px-2 py-1 text-xs font-mono rounded transition-colors ${
+                      command === cmd
+                        ? theme === 'dark' ? 'bg-gray-700 text-gray-100' : 'bg-gray-200 text-gray-900'
+                        : theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {cmd}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className={`p-4 pt-0 flex gap-2`}>
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1">
+              Save
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function LogsModal({
+  theme,
+  repo,
+  onClose
+}: {
+  theme: Theme
+  repo: Repo
+  onClose: () => void
+}) {
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const logsEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const data = await api.getProcessLogs(repo.id, 200)
+        setLogs(data)
+      } catch {
+        // Process might not be running
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchLogs()
+    const interval = setInterval(fetchLogs, 1000)
+    return () => clearInterval(interval)
+  }, [repo.id])
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logs])
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[5vh] z-50 px-4" onClick={onClose}>
+      <div
+        className={`rounded-xl shadow-2xl w-full max-w-3xl h-[80vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={`p-4 border-b flex items-center justify-between ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+          <div>
+            <h2 className={`text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Process Logs</h2>
+            <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{repo.name}</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="h-4 w-4" />
           </Button>
         </div>
+        <div className={`flex-1 overflow-y-auto p-4 font-mono text-xs ${theme === 'dark' ? 'bg-gray-950' : 'bg-gray-50'}`}>
+          {loading ? (
+            <div className={`${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>Loading...</div>
+          ) : logs.length === 0 ? (
+            <div className={`${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>No logs available. Process may not be running.</div>
+          ) : (
+            logs.map((log, i) => (
+              <div key={i} className={`py-0.5 ${log.stream === 'stderr' ? 'text-red-400' : theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                <span className={`${theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}`}>
+                  {new Date(log.time).toLocaleTimeString()}
+                </span>
+                {' '}
+                {log.message}
+              </div>
+            ))
+          )}
+          <div ref={logsEndRef} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CommitModal({
+  theme,
+  repo,
+  onClose,
+  onCommit
+}: {
+  theme: Theme
+  repo: Repo
+  onClose: () => void
+  onCommit: (message: string) => void
+}) {
+  const [message, setMessage] = useState('')
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (message.trim()) {
+      onCommit(message.trim())
+      onClose()
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[10vh] z-50 px-4" onClick={onClose}>
+      <div
+        className={`rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <form onSubmit={handleSubmit}>
+          <div className={`p-4 border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+            <h2 className={`text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Commit Changes</h2>
+            <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{repo.name}</p>
+          </div>
+          <div className="p-4">
+            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              Commit message
+            </label>
+            <textarea
+              ref={inputRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="What did you change?"
+              rows={3}
+              className={`mt-2 w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 resize-none ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-100 focus:ring-gray-600' : 'border-gray-200 focus:ring-gray-900'}`}
+            />
+          </div>
+          <div className={`p-4 pt-0 flex gap-2`}>
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!message.trim()} className="flex-1">
+              Commit
+            </Button>
+          </div>
+        </form>
       </div>
     </div>
   )

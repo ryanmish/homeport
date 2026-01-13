@@ -16,6 +16,7 @@ services:
       - ${HOME}/.config/gh:/home/homeport/.config/gh:ro
     environment:
       - HOMEPORT_EXTERNAL_URL=${EXTERNAL_URL:-http://localhost}
+      - HOMEPORT_COOKIE_SECRET=${COOKIE_SECRET:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/status"]

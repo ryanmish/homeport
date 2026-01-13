@@ -161,3 +161,15 @@ func getProcessCWD(pid int) (string, error) {
 	}
 	return cwd, nil
 }
+
+// getProcessCommand reads /proc/<pid>/cmdline to get the full command
+func getProcessCommand(pid int) (string, error) {
+	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", pid)
+	data, err := os.ReadFile(cmdlinePath)
+	if err != nil {
+		return "", err
+	}
+	// cmdline is null-separated, replace with spaces
+	cmd := strings.ReplaceAll(string(data), "\x00", " ")
+	return strings.TrimSpace(cmd), nil
+}

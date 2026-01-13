@@ -17,6 +17,7 @@ import (
 
 	"github.com/gethomeport/homeport/internal/config"
 	"github.com/gethomeport/homeport/internal/github"
+	"github.com/gethomeport/homeport/internal/process"
 	"github.com/gethomeport/homeport/internal/proxy"
 	"github.com/gethomeport/homeport/internal/scanner"
 	"github.com/gethomeport/homeport/internal/share"
@@ -35,6 +36,7 @@ type Server struct {
 	store    *store.Store
 	scanner  *scanner.Scanner
 	github   *github.Client
+	procs    *process.Manager
 	router   chi.Router
 	stopScan chan struct{}
 }
@@ -45,6 +47,7 @@ func NewServer(cfg *config.Config, st *store.Store) *Server {
 		store:    st,
 		scanner:  scanner.New(cfg.PortRangeMin, cfg.PortRangeMax, cfg.ReposDir),
 		github:   github.NewClient(cfg.ReposDir),
+		procs:    process.NewManager(),
 		stopScan: make(chan struct{}),
 	}
 
@@ -69,8 +72,17 @@ func (s *Server) setupRouter() {
 		r.Route("/repos", func(r chi.Router) {
 			r.Get("/", s.handleListRepos)
 			r.Post("/", s.handleCloneRepo)
+			r.Post("/init", s.handleInitRepo)
 			r.Delete("/{id}", s.handleDeleteRepo)
+			r.Patch("/{id}", s.handleUpdateRepo)
 			r.Post("/{id}/pull", s.handlePullRepo)
+			r.Get("/{id}/status", s.handleGetRepoStatus)
+			r.Get("/{id}/info", s.handleGetRepoInfo)
+			r.Get("/{id}/branches", s.handleListBranches)
+			r.Post("/{id}/checkout", s.handleCheckoutBranch)
+			r.Post("/{id}/exec", s.handleExecCommand)
+			r.Post("/{id}/commit", s.handleGitCommit)
+			r.Post("/{id}/push", s.handleGitPush)
 		})
 
 		r.Route("/github", func(r chi.Router) {
@@ -83,6 +95,17 @@ func (s *Server) setupRouter() {
 			r.Post("/{port}", s.handleSharePort)
 			r.Delete("/{port}", s.handleUnsharePort)
 		})
+
+		r.Route("/processes", func(r chi.Router) {
+			r.Get("/", s.handleListProcesses)
+			r.Post("/{repoId}/start", s.handleStartProcess)
+			r.Post("/{repoId}/stop", s.handleStopProcess)
+			r.Get("/{repoId}/logs", s.handleGetProcessLogs)
+		})
+
+		r.Get("/version", s.handleVersion)
+		r.Get("/updates", s.handleCheckUpdates)
+		r.Get("/activity", s.handleGetActivity)
 	})
 
 	// Dynamic port proxy - matches /{port}/* patterns

@@ -65,16 +65,16 @@ case "$1" in
         echo "$URL/$2/"
         ;;
     *)
-        echo "Homeport CLI"
+        echo "HOMEPORT - Mission Control CLI"
         echo ""
         echo "Commands:"
-        echo "  list              List detected ports"
-        echo "  status            Show daemon status"
-        echo "  repos             List cloned repositories"
-        echo "  share <port>      Share a port (default: private)"
-        echo "    --public        Make publicly accessible"
-        echo "    --password      Require password"
-        echo "  unshare <port>    Remove sharing"
-        echo "  url <port>        Get shareable URL"
+        echo "  list              Show active docking bays"
+        echo "  status            Station status report"
+        echo "  repos             List docked repositories"
+        echo "  share <port>      Open airlock for external access"
+        echo "    --public        Open to all vessels"
+        echo "    --password      Require access code"
+        echo "  unshare <port>    Seal airlock"
+        echo "  url <port>        Get docking coordinates"
         ;;
 esac

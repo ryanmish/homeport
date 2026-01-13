@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -73,8 +74,37 @@ func (s *Server) portAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// getClientIP extracts the client IP from the request
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For first (for proxied requests)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	// Check CF-Connecting-IP (Cloudflare)
+	if cfIP := r.Header.Get("CF-Connecting-IP"); cfIP != "" {
+		return cfIP
+	}
+	// Fall back to RemoteAddr
+	ip := r.RemoteAddr
+	if idx := strings.LastIndex(ip, ":"); idx != -1 {
+		ip = ip[:idx]
+	}
+	return ip
+}
+
 // handlePasswordAuth shows the password form or validates the submitted password
 func (s *Server) handlePasswordAuth(w http.ResponseWriter, r *http.Request, port int, portInfo *store.Port) {
+	clientIP := getClientIP(r)
+
+	// Check rate limiting
+	if share.CheckRateLimit(clientIP) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(share.PasswordFormHTML(port, "Too many failed attempts. Please try again later.")))
+		return
+	}
+
 	// Check if this is a form submission
 	if r.Method == "POST" && r.URL.Path == "/"+strconv.Itoa(port)+"/_auth" {
 		if err := r.ParseForm(); err != nil {
@@ -86,6 +116,9 @@ func (s *Server) handlePasswordAuth(w http.ResponseWriter, r *http.Request, port
 
 		password := r.FormValue("password")
 		if share.VerifyPassword(password, portInfo.PasswordHash) {
+			// Clear rate limiting on success
+			share.ClearRateLimit(clientIP)
+
 			// Set auth cookie (valid for 24 hours)
 			share.SetAuthCookie(w, port, 24*time.Hour)
 
@@ -94,7 +127,9 @@ func (s *Server) handlePasswordAuth(w http.ResponseWriter, r *http.Request, port
 			return
 		}
 
-		// Wrong password
+		// Wrong password - record failed attempt
+		share.RecordFailedAttempt(clientIP)
+
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte(share.PasswordFormHTML(port, "Incorrect password")))

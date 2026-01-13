@@ -124,3 +124,13 @@ func getProcessCWD(pid int) (string, error) {
 
 	return "", fmt.Errorf("cwd not found for pid %d", pid)
 }
+
+// getProcessCommand uses ps to get the full command line on macOS
+func getProcessCommand(pid int) (string, error) {
+	cmd := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "command=")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}

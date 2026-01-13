@@ -13,19 +13,21 @@ NC='\033[0m'
 clear
 echo -e "${BLUE}"
 cat << 'EOF'
+  *  .  *  .  *  .  *  .  *  .  *  .  *  .  *  .  *
   _   _                                      _
  | | | | ___  _ __ ___   ___ _ __   ___  _ __| |_
  | |_| |/ _ \| '_ ` _ \ / _ \ '_ \ / _ \| '__| __|
  |  _  | (_) | | | | | |  __/ |_) | (_) | |  | |_
  |_| |_|\___/|_| |_| |_|\___| .__/ \___/|_|   \__|
                             |_|
+  *  .  *  .  *  .  *  .  *  .  *  .  *  .  *  .  *
 EOF
 echo -e "${NC}"
-echo -e "${BOLD}Self-hosted remote development environment${NC}"
 echo ""
-echo "This script will set up Homeport on your Ubuntu server."
-echo "It will install dependencies, configure Cloudflare Tunnel,"
-echo "and start all services."
+echo -e "${BOLD}Remote Development Environment${NC}"
+echo ""
+echo "Initiating launch sequence..."
+echo "This mission will deploy Homeport to your server."
 echo ""
 
 # Check if running as root
@@ -51,25 +53,25 @@ if [[ "$ID" != "ubuntu" && "$ID" != "debian" ]]; then
     fi
 fi
 
-echo -e "${BLUE}Step 1/6: Installing system dependencies${NC}"
-echo "=========================================="
+echo -e "${BLUE}[T-6] Loading cargo: System dependencies${NC}"
+echo "==========================================="
 
 # Update package list
 echo "Updating package list..."
 sudo apt-get update -qq
 
 # Install basic dependencies
-echo "Installing git, curl, wget..."
-sudo apt-get install -y -qq git curl wget ca-certificates gnupg lsb-release
+echo "Installing git, curl, wget, jq..."
+sudo apt-get install -y -qq git curl wget ca-certificates gnupg lsb-release jq
 
-echo -e "${GREEN}✓${NC} System dependencies installed"
+echo -e "${GREEN}[*]${NC} Cargo loaded"
 echo ""
 
-echo -e "${BLUE}Step 2/6: Installing Docker${NC}"
-echo "=========================================="
+echo -e "${BLUE}[T-5] Fueling engines: Docker${NC}"
+echo "==========================================="
 
 if command -v docker &> /dev/null; then
-    echo -e "${GREEN}✓${NC} Docker already installed ($(docker --version | cut -d' ' -f3 | tr -d ','))"
+    echo -e "${GREEN}[*]${NC} Docker already installed ($(docker --version | cut -d' ' -f3 | tr -d ','))"
 else
     echo "Installing Docker..."
 
@@ -91,16 +93,16 @@ else
     # Add current user to docker group
     sudo usermod -aG docker $USER
 
-    echo -e "${GREEN}✓${NC} Docker installed"
+    echo -e "${GREEN}[*]${NC} Docker installed"
     echo -e "${YELLOW}Note: You may need to log out and back in for docker group to take effect.${NC}"
 fi
 echo ""
 
-echo -e "${BLUE}Step 3/6: Installing GitHub CLI${NC}"
-echo "=========================================="
+echo -e "${BLUE}[T-4] Establishing comms: GitHub CLI${NC}"
+echo "==========================================="
 
 if command -v gh &> /dev/null; then
-    echo -e "${GREEN}✓${NC} GitHub CLI already installed ($(gh --version | head -1 | cut -d' ' -f3))"
+    echo -e "${GREEN}[*]${NC} GitHub CLI already installed ($(gh --version | head -1 | cut -d' ' -f3))"
 else
     echo "Installing GitHub CLI..."
 
@@ -111,51 +113,68 @@ else
     sudo apt-get update -qq
     sudo apt-get install -y -qq gh
 
-    echo -e "${GREEN}✓${NC} GitHub CLI installed"
+    echo -e "${GREEN}[*]${NC} GitHub CLI installed"
 fi
 
 # Check GitHub auth
 if gh auth status &> /dev/null; then
     GH_USER=$(gh api user -q .login 2>/dev/null || echo "authenticated")
-    echo -e "${GREEN}✓${NC} GitHub CLI authenticated as ${BOLD}$GH_USER${NC}"
+    echo -e "${GREEN}[*]${NC} GitHub CLI authenticated as ${BOLD}$GH_USER${NC}"
 else
     echo ""
     echo -e "${YELLOW}GitHub CLI needs to be authenticated.${NC}"
     echo "This allows Homeport to clone your repositories."
     echo ""
     gh auth login
-    echo -e "${GREEN}✓${NC} GitHub CLI authenticated"
+    echo -e "${GREEN}[*]${NC} GitHub CLI authenticated"
+fi
+
+# Make gh config readable by Docker container
+if [ -d "$HOME/.config/gh" ]; then
+    chmod -R a+r "$HOME/.config/gh"
 fi
 echo ""
 
-echo -e "${BLUE}Step 4/6: Installing Cloudflare Tunnel${NC}"
-echo "=========================================="
+echo -e "${BLUE}[T-3] Navigation systems: Cloudflare Tunnel${NC}"
+echo "============================================="
 
 if command -v cloudflared &> /dev/null; then
-    echo -e "${GREEN}✓${NC} cloudflared already installed ($(cloudflared --version | head -1 | cut -d' ' -f3))"
+    echo -e "${GREEN}[*]${NC} cloudflared already installed ($(cloudflared --version | head -1 | cut -d' ' -f3))"
 else
     echo "Installing cloudflared..."
 
+    # Detect architecture
+    ARCH=$(dpkg --print-architecture)
+    case $ARCH in
+        amd64) CF_ARCH="amd64" ;;
+        arm64) CF_ARCH="arm64" ;;
+        armhf) CF_ARCH="arm" ;;
+        *)
+            echo -e "${RED}Unsupported architecture: $ARCH${NC}"
+            exit 1
+            ;;
+    esac
+
     # Download and install cloudflared
-    curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
+    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}.deb" -o /tmp/cloudflared.deb
     sudo dpkg -i /tmp/cloudflared.deb
     rm /tmp/cloudflared.deb
 
-    echo -e "${GREEN}✓${NC} cloudflared installed"
+    echo -e "${GREEN}[*]${NC} cloudflared installed"
 fi
 echo ""
 
-echo -e "${BLUE}Step 5/6: Cloudflare Tunnel Setup${NC}"
-echo "=========================================="
+echo -e "${BLUE}[T-2] Plotting course: Tunnel Configuration${NC}"
+echo "============================================="
 
 # Check if tunnel already exists
 if [ -f "$HOME/.cloudflared/cert.pem" ]; then
-    echo -e "${GREEN}✓${NC} Cloudflare already authenticated"
+    echo -e "${GREEN}[*]${NC} Cloudflare already authenticated"
 
     # Check for existing tunnels
     EXISTING_TUNNEL=$(cloudflared tunnel list 2>/dev/null | grep -v "ID" | head -1 | awk '{print $2}')
     if [ -n "$EXISTING_TUNNEL" ]; then
-        echo -e "${GREEN}✓${NC} Found existing tunnel: $EXISTING_TUNNEL"
+        echo -e "${GREEN}[*]${NC} Found existing tunnel: $EXISTING_TUNNEL"
         read -p "Use existing tunnel? (y/n) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -169,7 +188,7 @@ else
     echo ""
     read -p "Press Enter to open Cloudflare login..."
     cloudflared tunnel login
-    echo -e "${GREEN}✓${NC} Cloudflare authenticated"
+    echo -e "${GREEN}[*]${NC} Cloudflare authenticated"
 fi
 
 # Create tunnel if needed
@@ -181,7 +200,7 @@ if [ -z "$TUNNEL_NAME" ]; then
 fi
 
 TUNNEL_ID=$(cloudflared tunnel list | grep "$TUNNEL_NAME" | awk '{print $1}')
-echo -e "${GREEN}✓${NC} Tunnel ID: $TUNNEL_ID"
+echo -e "${GREEN}[*]${NC} Tunnel ID: $TUNNEL_ID"
 
 # Get domain
 echo ""
@@ -196,9 +215,49 @@ if [ -z "$DOMAIN" ]; then
     exit 1
 fi
 
+# Ask about SSH access
+echo ""
+echo -e "${BOLD}Enable SSH access via Cloudflare Tunnel?${NC}"
+echo "This allows you to SSH into your server from anywhere"
+echo "without exposing port 22 to the internet."
+echo ""
+read -p "Enable SSH tunnel? (y/n) " -n 1 -r
+ENABLE_SSH=$REPLY
+echo ""
+
+SSH_DOMAIN=""
+if [[ $ENABLE_SSH =~ ^[Yy]$ ]]; then
+    # Extract base domain from the provided domain
+    # e.g., dev.example.com -> example.com
+    BASE_DOMAIN=$(echo "$DOMAIN" | rev | cut -d'.' -f1,2 | rev)
+    DEFAULT_SSH="ssh.$BASE_DOMAIN"
+
+    echo ""
+    echo "Enter subdomain for SSH access"
+    echo -e "Default: ${BOLD}$DEFAULT_SSH${NC}"
+    read -p "SSH Domain [$DEFAULT_SSH]: " SSH_DOMAIN
+    SSH_DOMAIN=${SSH_DOMAIN:-$DEFAULT_SSH}
+fi
+
 # Create tunnel config
 mkdir -p "$HOME/.cloudflared"
-cat > "$HOME/.cloudflared/config.yml" << EOF
+
+if [ -n "$SSH_DOMAIN" ]; then
+    # Config with SSH
+    cat > "$HOME/.cloudflared/config.yml" << EOF
+tunnel: $TUNNEL_ID
+credentials-file: $HOME/.cloudflared/$TUNNEL_ID.json
+
+ingress:
+  - hostname: $SSH_DOMAIN
+    service: ssh://localhost:22
+  - hostname: $DOMAIN
+    service: http://localhost:80
+  - service: http_status:404
+EOF
+else
+    # Config without SSH
+    cat > "$HOME/.cloudflared/config.yml" << EOF
 tunnel: $TUNNEL_ID
 credentials-file: $HOME/.cloudflared/$TUNNEL_ID.json
 
@@ -207,28 +266,38 @@ ingress:
     service: http://localhost:80
   - service: http_status:404
 EOF
+fi
 
-echo -e "${GREEN}✓${NC} Tunnel config created"
+echo -e "${GREEN}[*]${NC} Tunnel config created"
 
 # Set up DNS
 echo ""
 echo "Setting up DNS routing..."
 cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN" 2>/dev/null || echo "DNS route may already exist"
-echo -e "${GREEN}✓${NC} DNS configured for $DOMAIN"
+echo -e "${GREEN}[*]${NC} DNS configured for $DOMAIN"
+
+if [ -n "$SSH_DOMAIN" ]; then
+    cloudflared tunnel route dns "$TUNNEL_NAME" "$SSH_DOMAIN" 2>/dev/null || echo "SSH DNS route may already exist"
+    echo -e "${GREEN}[*]${NC} DNS configured for $SSH_DOMAIN (SSH)"
+fi
 echo ""
 
-echo -e "${BLUE}Step 6/6: Starting Homeport${NC}"
-echo "=========================================="
+echo -e "${BLUE}[T-1] Ignition: Starting Homeport${NC}"
+echo "==========================================="
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOMEPORT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Generate cookie secret for persistent sessions
+COOKIE_SECRET=$(openssl rand -hex 32)
 
 # Create .env file
 cat > "$HOMEPORT_DIR/docker/.env" << EOF
 DOMAIN=$DOMAIN
 EXTERNAL_URL=https://$DOMAIN
 CODE_SERVER_AUTH=none
+COOKIE_SECRET=$COOKIE_SECRET
 EOF
 
 echo "Building Docker images (this may take a few minutes)..."
@@ -242,11 +311,11 @@ else
 fi
 
 $COMPOSE build --quiet
-echo -e "${GREEN}✓${NC} Docker images built"
+echo -e "${GREEN}[*]${NC} Docker images built"
 
 echo "Starting services..."
 $COMPOSE up -d
-echo -e "${GREEN}✓${NC} Services started"
+echo -e "${GREEN}[*]${NC} Services started"
 
 # Install systemd service for auto-start on boot
 echo "Setting up auto-start on boot..."
@@ -276,38 +345,48 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable homeport.service
-echo -e "${GREEN}✓${NC} Homeport will start on boot"
+echo -e "${GREEN}[*]${NC} Homeport will start on boot"
 
 # Start cloudflared tunnel
 echo "Starting Cloudflare Tunnel..."
 sudo cloudflared service install 2>/dev/null || true
 sudo systemctl enable cloudflared 2>/dev/null || true
 sudo systemctl start cloudflared 2>/dev/null || cloudflared tunnel run "$TUNNEL_NAME" &
-echo -e "${GREEN}✓${NC} Tunnel running (will auto-start on boot)"
+echo -e "${GREEN}[*]${NC} Tunnel running (will auto-start on boot)"
 
 # Install CLI
 echo "Installing homeport CLI..."
 sudo cp "$HOMEPORT_DIR/scripts/homeport-cli.sh" /usr/local/bin/homeport
 sudo chmod +x /usr/local/bin/homeport
-echo -e "${GREEN}✓${NC} CLI installed (run 'homeport' from anywhere)"
+echo -e "${GREEN}[*]${NC} CLI installed (run 'homeport' from anywhere)"
 
 echo ""
-echo -e "${GREEN}=========================================="
-echo -e "        Installation Complete!"
-echo -e "==========================================${NC}"
+echo -e "${GREEN}==========================================="
+echo -e "       LAUNCH SUCCESSFUL"
+echo -e "===========================================${NC}"
 echo ""
 echo -e "Your Homeport is now available at:"
 echo ""
 echo -e "  ${BOLD}https://$DOMAIN${NC}              Dashboard"
 echo -e "  ${BOLD}https://$DOMAIN/code/${NC}        VS Code"
 echo ""
-echo -e "Detected ports will appear at:"
+echo -e "Docking bays for dev servers:"
 echo -e "  ${BOLD}https://$DOMAIN/3000/${NC}        (example)"
 echo ""
+if [ -n "$SSH_DOMAIN" ]; then
+echo -e "Remote command access:"
+echo -e "  ${BOLD}https://$SSH_DOMAIN${NC}          SSH (browser)"
+echo ""
+echo "  Or from terminal:"
+echo "  cloudflared access ssh --hostname $SSH_DOMAIN"
+echo ""
+fi
 echo -e "${YELLOW}Note: DNS may take a few minutes to propagate.${NC}"
 echo ""
-echo "Useful commands:"
+echo "Mission control commands:"
 echo "  View logs:     cd $HOMEPORT_DIR/docker && $COMPOSE logs -f"
-echo "  Stop:          cd $HOMEPORT_DIR/docker && $COMPOSE down"
-echo "  Restart:       cd $HOMEPORT_DIR/docker && $COMPOSE restart"
+echo "  Power down:    cd $HOMEPORT_DIR/docker && $COMPOSE down"
+echo "  Reboot:        cd $HOMEPORT_DIR/docker && $COMPOSE restart"
+echo ""
+echo "Safe travels, Commander."
 echo ""

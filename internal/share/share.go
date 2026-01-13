@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -18,17 +19,56 @@ import (
 // cookieSecret is used to sign auth cookies
 var cookieSecret []byte
 
+// rateLimiter tracks failed password attempts per IP
+var rateLimiter = struct {
+	attempts map[string]int
+	mu       sync.Mutex
+}{attempts: make(map[string]int)}
+
 func init() {
 	// Load from environment or generate random secret
 	if secret := os.Getenv("HOMEPORT_COOKIE_SECRET"); secret != "" {
 		cookieSecret = []byte(secret)
 	} else {
 		// Generate random 32-byte secret for this session
+		// Note: This means sessions are invalidated on restart
+		// Set HOMEPORT_COOKIE_SECRET for persistent sessions
 		cookieSecret = make([]byte, 32)
 		if _, err := rand.Read(cookieSecret); err != nil {
 			panic("failed to generate cookie secret: " + err.Error())
 		}
 	}
+
+	// Clean up rate limiter every 15 minutes
+	go func() {
+		for {
+			time.Sleep(15 * time.Minute)
+			rateLimiter.mu.Lock()
+			rateLimiter.attempts = make(map[string]int)
+			rateLimiter.mu.Unlock()
+		}
+	}()
+}
+
+// CheckRateLimit returns true if the IP is rate limited (too many failed attempts)
+func CheckRateLimit(ip string) bool {
+	rateLimiter.mu.Lock()
+	defer rateLimiter.mu.Unlock()
+	return rateLimiter.attempts[ip] >= 5
+}
+
+// RecordFailedAttempt increments the failed attempt counter for an IP
+func RecordFailedAttempt(ip string) {
+	rateLimiter.mu.Lock()
+	defer rateLimiter.mu.Unlock()
+	rateLimiter.attempts[ip]++
+}
+
+// ClearRateLimit removes rate limiting for an IP after successful auth
+func ClearRateLimit(ip string) {
+	rateLimiter.mu.Lock()
+	defer rateLimiter.mu.Unlock()
+	delete(rateLimiter.attempts, ip)
 }
 
 // VerifyPassword checks if the provided password matches the hash

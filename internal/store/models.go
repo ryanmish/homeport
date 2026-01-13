@@ -18,11 +18,22 @@ type Port struct {
 	RepoName     string     `json:"repo_name,omitempty"`
 	PID          int        `json:"pid,omitempty"`
 	ProcessName  string     `json:"process_name,omitempty"`
-	ShareMode    string     `json:"share_mode"` // "private", "password", "public"
+	Command      string     `json:"command,omitempty"` // Full command line
+	ShareMode    string     `json:"share_mode"`        // "private", "password", "public"
 	PasswordHash string     `json:"-"`
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 	FirstSeen    time.Time  `json:"first_seen"`
 	LastSeen     time.Time  `json:"last_seen"`
+}
+
+// RepoStatus contains git status info for a repo
+type RepoStatus struct {
+	Branch        string `json:"branch"`
+	IsDirty       bool   `json:"is_dirty"`
+	Ahead         int    `json:"ahead"`
+	Behind        int    `json:"behind"`
+	LastCommit    string `json:"last_commit,omitempty"`
+	LastCommitMsg string `json:"last_commit_msg,omitempty"`
 }
 
 type AccessLog struct {

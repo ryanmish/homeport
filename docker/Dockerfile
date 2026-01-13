@@ -32,11 +32,12 @@ RUN npm run build
 # Final stage
 FROM alpine:3.19
 
-# Install runtime dependencies
+# Install runtime dependencies including gh CLI
 RUN apk add --no-cache \
     ca-certificates \
     git \
     openssh-client \
+    github-cli \
     && rm -rf /var/cache/apk/*
 
 # Create app user

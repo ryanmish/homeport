@@ -39,6 +39,7 @@ func (s *Scanner) Scan() ([]store.Port, error) {
 			Port:        rp.Port,
 			PID:         rp.PID,
 			ProcessName: rp.ProcessName,
+			Command:     rp.Command,
 			ShareMode:   "private",
 			FirstSeen:   now,
 			LastSeen:    now,
@@ -48,6 +49,12 @@ func (s *Scanner) Scan() ([]store.Port, error) {
 		if rp.PID > 0 {
 			if repoID := s.findRepoForPID(rp.PID); repoID != "" {
 				p.RepoID = repoID
+			}
+			// Get full command if not already set
+			if p.Command == "" {
+				if cmd, err := getProcessCommand(rp.PID); err == nil {
+					p.Command = cmd
+				}
 			}
 		}
 
@@ -92,8 +99,10 @@ type RawPort struct {
 	Port        int
 	PID         int
 	ProcessName string
+	Command     string
 }
 
 // Platform-specific functions are defined in scanner_darwin.go and scanner_linux.go:
 // - scanPorts(minPort, maxPort int) ([]RawPort, error)
 // - getProcessCWD(pid int) (string, error)
+// - getProcessCommand(pid int) (string, error)

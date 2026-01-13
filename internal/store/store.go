@@ -134,6 +134,14 @@ func (s *Store) DeleteRepo(id string) error {
 	return err
 }
 
+func (s *Store) UpdateRepo(r *Repo) error {
+	_, err := s.db.Exec(
+		`UPDATE repos SET name = ?, path = ?, github_url = ?, start_command = ?, updated_at = ? WHERE id = ?`,
+		r.Name, r.Path, r.GitHubURL, r.StartCommand, r.UpdatedAt, r.ID,
+	)
+	return err
+}
+
 func (s *Store) GetRepoByPath(path string) (*Repo, error) {
 	var r Repo
 	var githubURL, startCmd sql.NullString
