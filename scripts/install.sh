@@ -326,6 +326,119 @@ if [ -n "$SSH_DOMAIN" ]; then
         echo "    Add a CNAME record: $SSH_DOMAIN -> $TUNNEL_ID.cfargotunnel.com"
     fi
 fi
+
+# Set up Cloudflare Access for authentication
+echo ""
+echo -e "${BLUE}[T-1.5] Security shields: Cloudflare Access${NC}"
+echo "============================================="
+echo ""
+echo -e "${BOLD}Cloudflare Access protects your tunnel with authentication.${NC}"
+echo ""
+echo "To set this up, you need a Cloudflare API token."
+echo "Create one at: https://dash.cloudflare.com/profile/api-tokens"
+echo ""
+echo "Required permissions:"
+echo "  - Account > Access: Apps and Policies > Edit"
+echo "  - Account > Account Settings > Read"
+echo ""
+read -p "Enter your Cloudflare API token (or press Enter to skip): " CF_API_TOKEN
+
+if [ -n "$CF_API_TOKEN" ]; then
+    # Get user's email for access policy
+    echo ""
+    read -p "Enter your email (for access policy): " USER_EMAIL
+
+    if [ -z "$USER_EMAIL" ]; then
+        echo -e "${YELLOW}[!]${NC} Email required for access policy, skipping Access setup"
+    else
+        # Get account ID
+        echo "Configuring Cloudflare Access..."
+        ACCOUNT_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+        if [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "null" ]; then
+            echo -e "${YELLOW}[!]${NC} Could not get account ID. Check your API token permissions."
+        else
+            # Create Access application for main domain
+            APP_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps" \
+                -H "Authorization: Bearer $CF_API_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data "{
+                    \"name\": \"Homeport - $DOMAIN\",
+                    \"domain\": \"$DOMAIN\",
+                    \"type\": \"self_hosted\",
+                    \"session_duration\": \"24h\",
+                    \"auto_redirect_to_identity\": true
+                }")
+
+            APP_ID=$(echo "$APP_RESPONSE" | jq -r '.result.id')
+
+            if [ -n "$APP_ID" ] && [ "$APP_ID" != "null" ]; then
+                # Create access policy - allow only this email
+                curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps/$APP_ID/policies" \
+                    -H "Authorization: Bearer $CF_API_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    --data "{
+                        \"name\": \"Allow owner\",
+                        \"decision\": \"allow\",
+                        \"include\": [{\"email\": {\"email\": \"$USER_EMAIL\"}}],
+                        \"precedence\": 1
+                    }" > /dev/null
+
+                echo -e "${GREEN}[*]${NC} Access configured for $DOMAIN (allowed: $USER_EMAIL)"
+
+                # Also protect SSH domain if set
+                if [ -n "$SSH_DOMAIN" ]; then
+                    SSH_APP_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps" \
+                        -H "Authorization: Bearer $CF_API_TOKEN" \
+                        -H "Content-Type: application/json" \
+                        --data "{
+                            \"name\": \"Homeport SSH - $SSH_DOMAIN\",
+                            \"domain\": \"$SSH_DOMAIN\",
+                            \"type\": \"ssh\",
+                            \"session_duration\": \"24h\",
+                            \"auto_redirect_to_identity\": true
+                        }")
+
+                    SSH_APP_ID=$(echo "$SSH_APP_RESPONSE" | jq -r '.result.id')
+
+                    if [ -n "$SSH_APP_ID" ] && [ "$SSH_APP_ID" != "null" ]; then
+                        curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps/$SSH_APP_ID/policies" \
+                            -H "Authorization: Bearer $CF_API_TOKEN" \
+                            -H "Content-Type: application/json" \
+                            --data "{
+                                \"name\": \"Allow owner\",
+                                \"decision\": \"allow\",
+                                \"include\": [{\"email\": {\"email\": \"$USER_EMAIL\"}}],
+                                \"precedence\": 1
+                            }" > /dev/null
+
+                        echo -e "${GREEN}[*]${NC} Access configured for $SSH_DOMAIN (allowed: $USER_EMAIL)"
+                    fi
+                fi
+            else
+                ERROR_MSG=$(echo "$APP_RESPONSE" | jq -r '.errors[0].message // "Unknown error"')
+                echo -e "${YELLOW}[!]${NC} Failed to create Access app: $ERROR_MSG"
+            fi
+        fi
+    fi
+else
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  WARNING: YOUR TUNNEL IS PUBLICLY ACCESSIBLE WITHOUT AUTH!  ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "Set up Cloudflare Access manually:"
+    echo "  1. Go to https://one.dash.cloudflare.com"
+    echo "  2. Access > Applications > Add application"
+    echo "  3. Protect: $DOMAIN"
+    if [ -n "$SSH_DOMAIN" ]; then
+        echo "  4. Also protect: $SSH_DOMAIN"
+    fi
+    echo ""
+    read -p "Press Enter to continue (at your own risk)..."
+fi
 echo ""
 
 echo -e "${BLUE}[T-1] Ignition: Starting Homeport${NC}"
