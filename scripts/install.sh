@@ -176,8 +176,8 @@ echo "============================================="
 if [ -f "$HOME/.cloudflared/cert.pem" ]; then
     echo -e "${GREEN}[*]${NC} Cloudflare already authenticated"
 
-    # Check for existing tunnels
-    EXISTING_TUNNEL=$(cloudflared tunnel list 2>/dev/null | grep -v "ID" | head -1 | awk '{print $2}')
+    # Check for existing tunnels using JSON output for reliable parsing
+    EXISTING_TUNNEL=$(cloudflared tunnel list --output json 2>/dev/null | jq -r '.[0].name // empty')
     if [ -n "$EXISTING_TUNNEL" ]; then
         echo -e "${GREEN}[*]${NC} Found existing tunnel: $EXISTING_TUNNEL"
         read -p "Use existing tunnel? (y/n) " -n 1 -r
@@ -189,9 +189,8 @@ if [ -f "$HOME/.cloudflared/cert.pem" ]; then
 else
     echo ""
     echo "You need to authenticate with Cloudflare."
-    echo "This will open a browser window to log in."
+    echo "A URL will be displayed - open it in your browser to log in."
     echo ""
-    read -p "Press Enter to open Cloudflare login..."
     cloudflared tunnel login
     echo -e "${GREEN}[*]${NC} Cloudflare authenticated"
 fi
@@ -204,7 +203,8 @@ if [ -z "$TUNNEL_NAME" ]; then
     cloudflared tunnel create "$TUNNEL_NAME" 2>/dev/null || true
 fi
 
-TUNNEL_ID=$(cloudflared tunnel list | grep "$TUNNEL_NAME" | awk '{print $1}')
+# Get tunnel ID using JSON for reliable parsing
+TUNNEL_ID=$(cloudflared tunnel list --output json | jq -r ".[] | select(.name==\"$TUNNEL_NAME\") | .id")
 echo -e "${GREEN}[*]${NC} Tunnel ID: $TUNNEL_ID"
 
 # Get domain
