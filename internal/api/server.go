@@ -694,6 +694,25 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             animation: spin 1s linear infinite;
         }
 
+        .loading-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #e5e7eb;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .loading-spinner.light {
+            border-color: rgba(255,255,255,0.3);
+            border-top-color: white;
+        }
+
+        .header-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
         /* Port selector */
         .port-selector {
             position: relative;
@@ -832,10 +851,10 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         <div class="header-right">
             <div class="server-controls">
                 <button class="header-btn primary start-server-btn" id="startServerBtn" onclick="startServer()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
                         <polygon points="5 3 19 12 5 21 5 3"/>
                     </svg>
-                    Start Server
+                    Start Dev Server
                 </button>
                 <div class="server-running-controls" id="serverRunningControls">
                     <div class="port-selector">
@@ -911,6 +930,10 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                 });
 
                 allPorts = relevantPorts;
+
+                // Don't update UI if we're in the middle of a loading operation
+                // (the polling functions will handle the UI transition)
+                if (isStarting || isStopping) return;
 
                 // Update header controls
                 const startBtn = document.getElementById('startServerBtn');
@@ -1006,7 +1029,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             const btn = document.getElementById('startServerBtn');
             isStarting = false;
             btn.disabled = false;
-            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Server';
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Dev Server';
         }
 
         function resetStopButton() {
@@ -1021,7 +1044,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             isStarting = true;
             const btn = document.getElementById('startServerBtn');
             btn.disabled = true;
-            btn.innerHTML = '<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Starting...';
+            btn.innerHTML = '<span class="loading-spinner light"></span> Starting...';
 
             try {
                 const resp = await fetch('/api/repos', { credentials: 'include' });
@@ -1046,14 +1069,32 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                 let attempts = 0;
                 const pollForPort = async () => {
                     attempts++;
-                    await checkPorts();
-                    if (allPorts.length > 0) {
-                        // Port detected, checkPorts will show running controls
-                        isStarting = false;
-                    } else if (attempts < 10) {
+                    // Fetch ports directly without triggering UI update
+                    const resp = await fetch('/api/ports', { credentials: 'include' });
+                    if (resp.ok) {
+                        const ports = await resp.json();
+                        const relevantPorts = ports.filter(p => {
+                            if (p.port === 8080 || p.port === 8443) return false;
+                            return p.repo_id === REPO_NAME || (!p.repo_id && p.port >= 3000 && p.port <= 9999);
+                        });
+                        allPorts = relevantPorts;
+
+                        if (relevantPorts.length > 0) {
+                            // Port detected - update UI
+                            isStarting = false;
+                            activePort = relevantPorts[0];
+                            document.getElementById('startServerBtn').classList.add('hidden');
+                            const runningControls = document.getElementById('serverRunningControls');
+                            runningControls.classList.add('active');
+                            document.getElementById('portNum').textContent = ':' + activePort.port;
+                            return;
+                        }
+                    }
+
+                    if (attempts < 15) {
                         setTimeout(pollForPort, 1000);
                     } else {
-                        // Timeout after 10 seconds
+                        // Timeout after 15 seconds
                         resetStartButton();
                     }
                 };
@@ -1069,7 +1110,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             isStopping = true;
             const btn = document.getElementById('stopBtn');
             btn.disabled = true;
-            btn.innerHTML = '<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+            btn.innerHTML = '<span class="loading-spinner"></span> Stopping...';
 
             try {
                 const resp = await fetch('/api/repos', { credentials: 'include' });
@@ -1085,15 +1126,33 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                     let attempts = 0;
                     const pollForStop = async () => {
                         attempts++;
-                        await checkPorts();
-                        if (allPorts.length === 0) {
-                            // Port gone, checkPorts will show start button
-                            isStopping = false;
-                        } else if (attempts < 10) {
+                        // Fetch ports directly without triggering UI update
+                        const portResp = await fetch('/api/ports', { credentials: 'include' });
+                        if (portResp.ok) {
+                            const ports = await portResp.json();
+                            const relevantPorts = ports.filter(p => {
+                                if (p.port === 8080 || p.port === 8443) return false;
+                                return p.repo_id === REPO_NAME || (!p.repo_id && p.port >= 3000 && p.port <= 9999);
+                            });
+                            allPorts = relevantPorts;
+
+                            if (relevantPorts.length === 0) {
+                                // Port gone - update UI
+                                isStopping = false;
+                                activePort = null;
+                                document.getElementById('startServerBtn').classList.remove('hidden');
+                                resetStartButton();
+                                document.getElementById('serverRunningControls').classList.remove('active');
+                                return;
+                            }
+                        }
+
+                        if (attempts < 15) {
                             setTimeout(pollForStop, 1000);
                         } else {
-                            // Timeout
-                            resetStopButton();
+                            // Timeout - force refresh
+                            isStopping = false;
+                            checkPorts();
                         }
                     };
                     setTimeout(pollForStop, 500);
