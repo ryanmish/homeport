@@ -75,12 +75,10 @@ echo ""
 echo -e "${BLUE}[T-5] Fueling engines: Docker${NC}"
 echo "==========================================="
 
-DOCKER_JUST_INSTALLED=false
 if command -v docker &> /dev/null; then
     echo -e "${GREEN}[*]${NC} Docker already installed ($(docker --version | cut -d' ' -f3 | tr -d ','))"
 else
     echo "Installing Docker..."
-    DOCKER_JUST_INSTALLED=true
 
     # Add Docker's official GPG key
     sudo install -m 0755 -d /etc/apt/keyrings
@@ -310,24 +308,26 @@ EOF
 echo "Building Docker images (this may take a few minutes)..."
 cd "$HOMEPORT_DIR/docker"
 
-# Use docker compose (v2) or docker-compose (v1)
-if docker compose version &> /dev/null 2>&1 || sg docker -c "docker compose version" &> /dev/null 2>&1; then
-    COMPOSE="docker compose"
-else
-    COMPOSE="docker-compose"
-fi
-
-# If Docker was just installed, use sg to run with docker group
-if [ "$DOCKER_JUST_INSTALLED" = true ]; then
-    sg docker -c "$COMPOSE build --quiet"
-    echo -e "${GREEN}[*]${NC} Docker images built"
-    echo "Starting services..."
-    sg docker -c "$COMPOSE up -d"
-else
+# Check if user can access Docker directly
+if docker info &> /dev/null; then
+    # User has docker access
+    if docker compose version &> /dev/null; then
+        COMPOSE="docker compose"
+    else
+        COMPOSE="docker-compose"
+    fi
     $COMPOSE build --quiet
     echo -e "${GREEN}[*]${NC} Docker images built"
     echo "Starting services..."
     $COMPOSE up -d
+else
+    # User needs docker group - use sg to run with docker group
+    echo "Activating docker group..."
+    COMPOSE="docker compose"
+    sg docker -c "$COMPOSE build --quiet"
+    echo -e "${GREEN}[*]${NC} Docker images built"
+    echo "Starting services..."
+    sg docker -c "$COMPOSE up -d"
 fi
 echo -e "${GREEN}[*]${NC} Services started"
 
