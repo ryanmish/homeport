@@ -48,6 +48,9 @@ import {
   Star,
 } from 'lucide-react'
 
+// Convert homeportd repo path to code-server path
+const toCodeServerPath = (path: string) => path.replace('/srv/homeport/repos', '/home/coder/repos')
+
 // Theme context
 type Theme = 'light' | 'dark'
 const ThemeContext = createContext<{ theme: Theme; toggleTheme: () => void }>({
@@ -1062,7 +1065,7 @@ function RepoCard({
   }, [])
 
   return (
-    <Card className={`overflow-hidden transition-all duration-200 hover:shadow-md ${theme === 'dark' ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'hover:shadow-lg'}`}>
+    <Card className={`transition-all duration-200 hover:shadow-md ${theme === 'dark' ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'hover:shadow-lg'}`}>
       <CardHeader className={`py-4 ${theme === 'dark' ? 'bg-gray-800/30' : 'bg-gray-50/50'}`}>
         <div className="flex items-start justify-between gap-4">
           {/* Left side: repo info */}
@@ -1195,7 +1198,7 @@ function RepoCard({
             <Button variant="ghost" size="sm" onClick={onPull} className="hidden sm:flex h-8 w-8 p-0" title="Pull latest">
               <RefreshCw className="h-4 w-4" />
             </Button>
-            <a href={`/code/?folder=${repo.path}`} target="_blank" rel="noopener noreferrer" className="hidden sm:block">
+            <a href={`/code/?folder=${toCodeServerPath(repo.path)}`} target="_blank" rel="noopener noreferrer" className="hidden sm:block">
               <Button variant="outline" size="sm" className="h-8">
                 Open in VS Code
               </Button>
@@ -1207,7 +1210,7 @@ function RepoCard({
               {showMenu && (
                 <div className={`absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg border z-50 py-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <a
-                    href={`/code/?folder=${repo.path}`}
+                    href={`/code/?folder=${toCodeServerPath(repo.path)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`flex items-center gap-2 w-full px-3 py-2 text-sm sm:hidden ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
@@ -1313,7 +1316,7 @@ function RepoCard({
               {repo.start_command ? 'No dev servers running' : 'No start command configured'}
             </p>
             {repo.start_command ? (
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => window.open(`/code/?folder=${repo.path}`, '_blank')}>
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => window.open(`/code/?folder=${toCodeServerPath(repo.path)}`, '_blank')}>
                 <Play className="h-3 w-3 mr-1" />
                 Open Terminal
               </Button>
@@ -1775,7 +1778,7 @@ function CommandPalette({
       id: `code-${r.id}`,
       label: `Open ${r.name} in VS Code`,
       icon: <Terminal className="h-4 w-4" />,
-      action: () => window.open(`/code/?folder=${r.path}`, '_blank'),
+      action: () => window.open(`/code/?folder=${toCodeServerPath(r.path)}`, '_blank'),
       category: 'Repositories'
     })),
   ]
