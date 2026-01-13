@@ -462,113 +462,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             border: none;
         }
 
-        /* Toast notifications */
-        .toast-container {
-            position: fixed;
-            top: 68px;
-            right: 24px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .toast {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 12px 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            min-width: 320px;
-            animation: slideIn 0.3s ease;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateX(100%%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        .toast-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .toast-title {
-            font-weight: 600;
-            font-size: 13px;
-            color: #111827;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .toast-title .dot {
-            width: 8px;
-            height: 8px;
-            background: #10b981;
-            border-radius: 50%%;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%%, 100%% { opacity: 1; }
-            50%% { opacity: 0.5; }
-        }
-
-        .toast-close {
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: #9ca3af;
-            padding: 4px;
-        }
-
-        .toast-close:hover {
-            color: #6b7280;
-        }
-
-        .toast-body {
-            font-size: 12px;
-            color: #6b7280;
-        }
-
-        .toast-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 4px;
-        }
-
-        .toast-btn {
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s;
-            border: 1px solid #e5e7eb;
-            background: white;
-            color: #374151;
-        }
-
-        .toast-btn:hover {
-            background: #f9fafb;
-        }
-
-        .toast-btn.primary {
-            background: #3b82f6;
-            color: white;
-            border-color: #3b82f6;
-        }
-
-        .toast-btn.primary:hover {
-            background: #2563eb;
-        }
-
-        /* Share modal */
+        /* Share dropdown */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -636,6 +530,280 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             justify-content: flex-end;
             gap: 8px;
         }
+
+        /* Share dropdown */
+        .share-dropdown {
+            z-index: 10001;
+        }
+
+        .share-dropdown-content {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            min-width: 320px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+
+        .share-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .share-mode-buttons {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+
+        .share-mode-btn {
+            flex: 1;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            color: #374151;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .share-mode-btn:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+        }
+
+        .share-mode-btn.active {
+            background: #111827;
+            color: white;
+            border-color: #111827;
+        }
+
+        .share-password-field {
+            margin-bottom: 12px;
+        }
+
+        .password-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .password-input-wrapper input {
+            width: 100%%;
+            padding: 8px 40px 8px 12px;
+            font-size: 13px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        .password-input-wrapper input:focus {
+            border-color: #9ca3af;
+            box-shadow: 0 0 0 2px rgba(156, 163, 175, 0.2);
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 8px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            color: #9ca3af;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .password-toggle:hover {
+            color: #6b7280;
+        }
+
+        .password-toggle svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .share-actions {
+            display: flex;
+            gap: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #f3f4f6;
+        }
+
+        .share-action-btn {
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1px solid #e5e7eb;
+        }
+
+        .share-action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .share-action-btn.cancel {
+            background: white;
+            color: #374151;
+        }
+
+        .share-action-btn.cancel:hover {
+            background: #f9fafb;
+        }
+
+        .share-action-btn.copy {
+            background: white;
+            color: #374151;
+            flex: 1;
+        }
+
+        .share-action-btn.copy:hover:not(:disabled) {
+            background: #f9fafb;
+        }
+
+        .share-action-btn.apply {
+            background: #111827;
+            color: white;
+            border-color: #111827;
+        }
+
+        .share-action-btn.apply:hover:not(:disabled) {
+            background: #374151;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+
+        /* Port selector */
+        .port-selector {
+            position: relative;
+        }
+
+        .server-status {
+            cursor: pointer;
+        }
+
+        .port-selector-btn {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            background: none;
+            border: none;
+            padding: 0;
+            margin-left: 6px;
+            cursor: pointer;
+            color: #166534;
+        }
+
+        .port-selector-btn.visible {
+            display: flex;
+        }
+
+        .port-selector-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .port-selector-btn .port-count {
+            font-size: 11px;
+            font-weight: 600;
+            background: #166534;
+            color: white;
+            padding: 1px 5px;
+            border-radius: 10px;
+        }
+
+        .port-selector-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100%% + 8px);
+            left: 0;
+            min-width: 220px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            padding: 6px;
+            z-index: 100;
+        }
+
+        .port-selector-dropdown.visible {
+            display: block;
+        }
+
+        .port-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%%;
+            padding: 8px 10px;
+            background: none;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.15s;
+        }
+
+        .port-option:hover {
+            background: #f3f4f6;
+        }
+
+        .port-option.active {
+            background: #f0fdf4;
+        }
+
+        .port-option-num {
+            font-family: monospace;
+            font-weight: 600;
+            font-size: 13px;
+            color: #111827;
+        }
+
+        .port-option-name {
+            flex: 1;
+            font-size: 12px;
+            color: #6b7280;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .port-option-mode {
+            font-size: 10px;
+            font-weight: 500;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .port-mode-private {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .port-mode-password {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .port-mode-public {
+            background: #d1fae5;
+            color: #065f46;
+        }
     </style>
 </head>
 <body>
@@ -664,9 +832,18 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                     Start Server
                 </button>
                 <div class="server-running-controls" id="serverRunningControls">
-                    <div class="server-status">
-                        <span class="dot"></span>
-                        <span class="port-num" id="portNum">:3000</span>
+                    <div class="port-selector">
+                        <div class="server-status" onclick="togglePortSelector()">
+                            <span class="dot"></span>
+                            <span class="port-num" id="portNum">:3000</span>
+                            <button class="port-selector-btn" id="portSelectorBtn">
+                                <span class="port-count">2</span>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="port-selector-dropdown" id="portSelectorDropdown"></div>
                     </div>
                     <button class="header-btn" id="copyBtn" onclick="copyPortUrl()" title="Copy URL">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -706,18 +883,16 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         </div>
     </header>
 
-    <div class="toast-container" id="toasts"></div>
-
     <iframe src="%s" allow="clipboard-read; clipboard-write"></iframe>
 
     <script>
         const REPO_NAME = '%s';
         const EXTERNAL_URL = '%s';
-        let knownPorts = new Set();
-        let dismissedPorts = new Set();
 
-        // Poll for new ports
+        // Track all running ports and the currently selected one
+        let allPorts = [];
         let activePort = null;
+        let showPortSelector = false;
 
         async function checkPorts() {
             try {
@@ -734,92 +909,79 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                            (!p.repo_id && p.port >= 3000 && p.port <= 9999);
                 });
 
+                allPorts = relevantPorts;
+
                 // Update header controls
                 const startBtn = document.getElementById('startServerBtn');
                 const runningControls = document.getElementById('serverRunningControls');
                 const portNum = document.getElementById('portNum');
+                const portSelector = document.getElementById('portSelectorBtn');
 
                 if (relevantPorts.length > 0) {
-                    activePort = relevantPorts[0];
+                    // Keep current active port if still running, otherwise switch to first
+                    if (!activePort || !relevantPorts.find(p => p.port === activePort.port)) {
+                        activePort = relevantPorts[0];
+                    } else {
+                        // Update activePort data (share_mode might have changed)
+                        activePort = relevantPorts.find(p => p.port === activePort.port);
+                    }
                     startBtn.classList.add('hidden');
                     runningControls.classList.add('active');
                     portNum.textContent = ':' + activePort.port;
+
+                    // Show/hide port selector based on number of ports
+                    if (relevantPorts.length > 1) {
+                        portSelector.classList.add('visible');
+                        portSelector.querySelector('.port-count').textContent = relevantPorts.length;
+                    } else {
+                        portSelector.classList.remove('visible');
+                    }
                 } else {
                     activePort = null;
                     startBtn.classList.remove('hidden');
                     runningControls.classList.remove('active');
+                    portSelector.classList.remove('visible');
                 }
-
-                for (const port of relevantPorts) {
-                    if (!knownPorts.has(port.port) && !dismissedPorts.has(port.port)) {
-                        knownPorts.add(port.port);
-                        showPortToast(port);
-                    }
-                }
-
-                // Remove ports that are no longer running
-                const currentPorts = new Set(relevantPorts.map(p => p.port));
-                knownPorts = new Set([...knownPorts].filter(p => currentPorts.has(p)));
             } catch (e) {
                 console.error('Port check failed:', e);
             }
         }
 
-        function showPortToast(port) {
-            const container = document.getElementById('toasts');
-            const toast = document.createElement('div');
-            toast.className = 'toast';
-            toast.id = 'toast-' + port.port;
-
-            const url = EXTERNAL_URL + '/' + port.port + '/';
-            const modeText = port.share_mode === 'private' ? 'privately' :
-                            port.share_mode === 'public' ? 'publicly' : 'with password';
-
-            toast.innerHTML = ` + "`" + `
-                <div class="toast-header">
-                    <div class="toast-title">
-                        <span class="dot"></span>
-                        Port ${port.port} is running
-                    </div>
-                    <button class="toast-close" onclick="dismissToast(${port.port})">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M18 6L6 18M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
-                <div class="toast-body">
-                    ${port.process_name || 'Dev server'} • Currently accessible ${modeText}
-                </div>
-                <div class="toast-actions">
-                    <button class="toast-btn primary" onclick="window.open('${url}', '_blank')">
-                        Open
-                    </button>
-                    <button class="toast-btn" onclick="copyUrl('${url}')">
-                        Copy URL
-                    </button>
-                    <button class="toast-btn" onclick="showShareModal(${port.port}, '${port.share_mode}')">
-                        Share Settings
-                    </button>
-                </div>
-            ` + "`" + `;
-
-            container.appendChild(toast);
-
-            // Auto-dismiss after 30 seconds
-            setTimeout(() => {
-                if (document.getElementById('toast-' + port.port)) {
-                    dismissToast(port.port);
-                }
-            }, 30000);
-        }
-
-        function dismissToast(port) {
-            const toast = document.getElementById('toast-' + port);
-            if (toast) {
-                dismissedPorts.add(port);
-                toast.remove();
+        function togglePortSelector() {
+            showPortSelector = !showPortSelector;
+            const dropdown = document.getElementById('portSelectorDropdown');
+            if (showPortSelector) {
+                renderPortSelector();
+                dropdown.classList.add('visible');
+            } else {
+                dropdown.classList.remove('visible');
             }
         }
+
+        function renderPortSelector() {
+            const dropdown = document.getElementById('portSelectorDropdown');
+            dropdown.innerHTML = allPorts.map(p => ` + "`" + `
+                <button class="port-option ${p.port === activePort?.port ? 'active' : ''}" onclick="selectPort(${p.port})">
+                    <span class="port-option-num">:${p.port}</span>
+                    <span class="port-option-name">${p.process_name || 'Dev server'}</span>
+                    <span class="port-option-mode port-mode-${p.share_mode}">${p.share_mode}</span>
+                </button>
+            ` + "`" + `).join('');
+        }
+
+        function selectPort(portNum) {
+            activePort = allPorts.find(p => p.port === portNum);
+            document.getElementById('portNum').textContent = ':' + activePort.port;
+            togglePortSelector();
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (showPortSelector && !e.target.closest('.port-selector')) {
+                showPortSelector = false;
+                document.getElementById('portSelectorDropdown').classList.remove('visible');
+            }
+        });
 
         function copyUrl(url) {
             navigator.clipboard.writeText(url);
@@ -836,115 +998,198 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             window.open('/' + activePort.port + '/', '_blank');
         }
 
+        let isStarting = false;
+        let isStopping = false;
+
         async function startServer() {
-            // Find repo ID from repo name
+            if (isStarting) return;
+            isStarting = true;
+            const btn = document.getElementById('startServerBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Starting...';
+
             try {
                 const resp = await fetch('/api/repos', { credentials: 'include' });
-                if (!resp.ok) return;
+                if (!resp.ok) { isStarting = false; return; }
                 const repos = await resp.json();
                 const repo = repos.find(r => r.name === REPO_NAME);
                 if (!repo) {
                     alert('Repository not found. Please configure a start command in the dashboard.');
+                    isStarting = false;
+                    btn.disabled = false;
+                    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Server';
                     return;
                 }
                 if (!repo.start_command) {
                     alert('No start command configured. Please set one in the dashboard.');
+                    isStarting = false;
+                    btn.disabled = false;
+                    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Server';
                     return;
                 }
-                await fetch('/api/repos/' + repo.id + '/start', {
+                await fetch('/api/processes/' + repo.id + '/start', {
                     method: 'POST',
                     credentials: 'include'
                 });
+                // Immediate check for port
+                setTimeout(checkPorts, 500);
+                setTimeout(checkPorts, 1500);
             } catch (e) {
                 console.error('Failed to start server:', e);
+            } finally {
+                isStarting = false;
+                btn.disabled = false;
+                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Server';
             }
         }
 
         async function stopServer() {
-            if (!activePort) return;
+            if (!activePort || isStopping) return;
+            isStopping = true;
+            const btn = document.getElementById('stopBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+
             try {
                 const resp = await fetch('/api/repos', { credentials: 'include' });
-                if (!resp.ok) return;
+                if (!resp.ok) { isStopping = false; return; }
                 const repos = await resp.json();
                 const repo = repos.find(r => r.name === REPO_NAME);
                 if (repo) {
-                    await fetch('/api/repos/' + repo.id + '/stop', {
+                    await fetch('/api/processes/' + repo.id + '/stop', {
                         method: 'POST',
                         credentials: 'include'
                     });
+                    // Immediate check for port
+                    setTimeout(checkPorts, 500);
+                    setTimeout(checkPorts, 1500);
                 }
             } catch (e) {
                 console.error('Failed to stop server:', e);
+            } finally {
+                isStopping = false;
+                btn.disabled = false;
+                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg> Stop';
             }
         }
 
-        let shareModal = null;
+        let shareDropdown = null;
+        let selectedMode = null;
+        let sharePassword = '';
+        let showPassword = false;
 
         function showShareModal(port, currentMode) {
-            if (shareModal) shareModal.remove();
+            if (shareDropdown) shareDropdown.remove();
+            selectedMode = currentMode;
+            sharePassword = '';
+            showPassword = false;
 
-            const overlay = document.createElement('div');
-            overlay.className = 'modal-overlay';
-            overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+            const dropdown = document.createElement('div');
+            dropdown.className = 'share-dropdown';
+            dropdown.innerHTML = renderShareDropdown(port, currentMode);
 
-            overlay.innerHTML = ` + "`" + `
-                <div class="modal">
-                    <div class="modal-title">Share Port ${port}</div>
-                    <div class="share-options">
-                        <div class="share-option ${currentMode === 'private' ? 'active' : ''}" onclick="selectShareMode(this, 'private')">
-                            <div class="share-option-title">Private</div>
-                            <div class="share-option-desc">Only accessible when logged into Homeport</div>
-                        </div>
-                        <div class="share-option ${currentMode === 'password' ? 'active' : ''}" onclick="selectShareMode(this, 'password')">
-                            <div class="share-option-title">Password</div>
-                            <div class="share-option-desc">Anyone with the password can access</div>
-                        </div>
-                        <div class="share-option ${currentMode === 'public' ? 'active' : ''}" onclick="selectShareMode(this, 'public')">
-                            <div class="share-option-title">Public</div>
-                            <div class="share-option-desc">Anyone with the link can access</div>
-                        </div>
+            // Position next to share button
+            const shareBtn = document.getElementById('shareBtn');
+            const rect = shareBtn.getBoundingClientRect();
+            dropdown.style.position = 'fixed';
+            dropdown.style.top = (rect.bottom + 8) + 'px';
+            dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+
+            document.body.appendChild(dropdown);
+            shareDropdown = dropdown;
+
+            // Close on outside click
+            setTimeout(() => {
+                document.addEventListener('click', closeShareDropdown);
+            }, 0);
+        }
+
+        function closeShareDropdown(e) {
+            if (shareDropdown && !shareDropdown.contains(e.target) && !e.target.closest('#shareBtn')) {
+                shareDropdown.remove();
+                shareDropdown = null;
+                document.removeEventListener('click', closeShareDropdown);
+            }
+        }
+
+        function renderShareDropdown(port, currentMode) {
+            return ` + "`" + `
+                <div class="share-dropdown-content">
+                    <div class="share-label">Sharing Mode</div>
+                    <div class="share-mode-buttons">
+                        <button class="share-mode-btn ${selectedMode === 'private' ? 'active' : ''}" onclick="selectShareMode('private', ${port})">Private</button>
+                        <button class="share-mode-btn ${selectedMode === 'password' ? 'active' : ''}" onclick="selectShareMode('password', ${port})">Password</button>
+                        <button class="share-mode-btn ${selectedMode === 'public' ? 'active' : ''}" onclick="selectShareMode('public', ${port})">Public</button>
                     </div>
-                    <div class="modal-actions">
-                        <button class="toast-btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-                        <button class="toast-btn primary" onclick="applyShareMode(${port})">Apply</button>
+                    ${selectedMode === 'password' ? ` + "`" + `
+                        <div class="share-password-field">
+                            <div class="share-label">Password</div>
+                            <div class="password-input-wrapper">
+                                <input type="${showPassword ? 'text' : 'password'}" id="sharePasswordInput" value="${sharePassword}" placeholder="Enter password..." oninput="sharePassword = this.value" />
+                                <button class="password-toggle" onclick="togglePasswordVisibility(${port})">
+                                    ${showPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'}
+                                </button>
+                            </div>
+                        </div>
+                    ` + "`" + ` : ''}
+                    <div class="share-actions">
+                        <button class="share-action-btn cancel" onclick="shareDropdown.remove(); shareDropdown = null;">Cancel</button>
+                        <button class="share-action-btn copy" onclick="applyShareMode(${port}, true)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply & Copy URL</button>
+                        <button class="share-action-btn apply" onclick="applyShareMode(${port}, false)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply</button>
                     </div>
                 </div>
             ` + "`" + `;
-
-            document.body.appendChild(overlay);
-            shareModal = overlay;
         }
 
-        let selectedMode = null;
+        function togglePasswordVisibility(port) {
+            showPassword = !showPassword;
+            if (shareDropdown) {
+                shareDropdown.innerHTML = renderShareDropdown(port, selectedMode);
+                const input = document.getElementById('sharePasswordInput');
+                if (input) {
+                    input.value = sharePassword;
+                    input.focus();
+                }
+            }
+        }
 
-        function selectShareMode(el, mode) {
-            document.querySelectorAll('.share-option').forEach(o => o.classList.remove('active'));
-            el.classList.add('active');
+        function selectShareMode(mode, port) {
             selectedMode = mode;
+            if (shareDropdown) {
+                shareDropdown.innerHTML = renderShareDropdown(port, mode);
+            }
         }
 
-        async function applyShareMode(port) {
+        async function applyShareMode(port, copyUrl) {
             if (!selectedMode) {
-                shareModal.remove();
+                if (shareDropdown) shareDropdown.remove();
+                shareDropdown = null;
                 return;
             }
 
             try {
                 let body = { mode: selectedMode };
                 if (selectedMode === 'password') {
-                    const pw = prompt('Enter share password:');
-                    if (!pw) return;
-                    body.password = pw;
+                    if (!sharePassword) return;
+                    body.password = sharePassword;
                 }
 
-                await fetch('/api/ports/' + port + '/share', {
+                await fetch('/api/share/' + port, {
                     method: 'POST',
                     credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
 
-                shareModal.remove();
+                if (copyUrl) {
+                    const url = EXTERNAL_URL + '/' + port + '/';
+                    navigator.clipboard.writeText(url);
+                }
+
+                if (shareDropdown) shareDropdown.remove();
+                shareDropdown = null;
+                document.removeEventListener('click', closeShareDropdown);
+
                 // Refresh the toast to show new mode
                 dismissedPorts.delete(port);
                 knownPorts.delete(port);

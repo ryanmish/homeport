@@ -46,6 +46,9 @@ import {
   GitCommit,
   History,
   Star,
+  Eye,
+  EyeOff,
+  Loader2,
 } from 'lucide-react'
 
 // Convert homeportd repo path to code-server path
@@ -83,6 +86,7 @@ function App() {
   const [repoInfos, setRepoInfos] = useState<Record<string, RepoInfo>>({})
   const [dismissedUpdate, setDismissedUpdate] = useState(false)
   const [processes, setProcesses] = useState<Process[]>([])
+  const [processLoading, setProcessLoading] = useState<Record<string, 'starting' | 'stopping'>>({})
   const [showLogsModal, setShowLogsModal] = useState<Repo | null>(null)
   const [showCommitModal, setShowCommitModal] = useState<Repo | null>(null)
   const [activity, setActivity] = useState<ActivityEntry[]>([])
@@ -329,22 +333,40 @@ function App() {
   }
 
   const handleStartProcess = async (repo: Repo) => {
+    setProcessLoading(prev => ({ ...prev, [repo.id]: 'starting' }))
     try {
       await api.startProcess(repo.id)
       toast.success(`Started ${repo.name}`)
-      fetchData()
+      // Immediate refresh + delayed refresh for port detection
+      await fetchData()
+      setTimeout(fetchData, 1500)
     } catch (err) {
       toast.error(`Failed to start: ${err}`)
+    } finally {
+      setProcessLoading(prev => {
+        const next = { ...prev }
+        delete next[repo.id]
+        return next
+      })
     }
   }
 
   const handleStopProcess = async (repo: Repo) => {
+    setProcessLoading(prev => ({ ...prev, [repo.id]: 'stopping' }))
     try {
       await api.stopProcess(repo.id)
       toast.success(`Stopped ${repo.name}`)
-      fetchData()
+      // Immediate refresh + delayed refresh for port cleanup
+      await fetchData()
+      setTimeout(fetchData, 1500)
     } catch (err) {
       toast.error('Failed to stop')
+    } finally {
+      setProcessLoading(prev => {
+        const next = { ...prev }
+        delete next[repo.id]
+        return next
+      })
     }
   }
 
@@ -629,6 +651,7 @@ function App() {
                     gitStatus={gitStatuses[repo.id]}
                     repoInfo={repoInfos[repo.id]}
                     process={processByRepo[repo.id]}
+                    processLoadingState={processLoading[repo.id]}
                     isFavorite={favorites.has(repo.id)}
                     theme={theme}
                     onDelete={() => handleDeleteRepo(repo)}
@@ -954,6 +977,7 @@ function RepoCard({
   gitStatus,
   repoInfo,
   process,
+  processLoadingState,
   isFavorite,
   theme,
   onDelete,
@@ -978,6 +1002,7 @@ function RepoCard({
   gitStatus?: GitStatus
   repoInfo?: RepoInfo
   process?: Process
+  processLoadingState?: 'starting' | 'stopping'
   isFavorite: boolean
   theme: Theme
   onDelete: () => void
@@ -1028,7 +1053,7 @@ function RepoCard({
 
   return (
     <Card className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'border-gray-200'}`}>
-      <CardHeader className={`py-4 ${theme === 'dark' ? 'bg-gray-800/30' : 'bg-gray-50/50'}`}>
+      <CardHeader className={`py-4 border-b ${theme === 'dark' ? 'bg-gray-800/50 border-gray-800' : 'bg-gray-50 border-gray-100'}`}>
         <div className="flex items-start justify-between gap-4">
           {/* Left side: repo info */}
           <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -1264,6 +1289,7 @@ function RepoCard({
                 key={port.port}
                 port={port}
                 isHealthy={portHealth[port.port]}
+                isStopping={processLoadingState === 'stopping'}
                 theme={theme}
                 onCopy={() => onCopyUrl(port.port)}
                 onCopyCurl={() => onCopyCurl(port.port)}
@@ -1276,12 +1302,22 @@ function RepoCard({
         ) : (
           <div className={`flex items-center justify-between py-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
             <p className="text-sm">
-              {repo.start_command ? 'No dev servers running' : 'No start command configured'}
+              {processLoadingState === 'starting' ? 'Starting server...' : repo.start_command ? 'No dev servers running' : 'No start command configured'}
             </p>
             {repo.start_command ? (
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onStartProcess}>
-                <Play className="h-3 w-3 mr-1" />
-                Start Server
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={onStartProcess}
+                disabled={!!processLoadingState}
+              >
+                {processLoadingState === 'starting' ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : (
+                  <Play className="h-3 w-3 mr-1" />
+                )}
+                {processLoadingState === 'starting' ? 'Starting...' : 'Start Server'}
               </Button>
             ) : (
               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onConfigureStart}>
@@ -1299,6 +1335,7 @@ function RepoCard({
 function PortRow({
   port,
   isHealthy,
+  isStopping,
   theme,
   onCopy,
   onCopyCurl,
@@ -1308,6 +1345,7 @@ function PortRow({
 }: {
   port: Port
   isHealthy?: boolean
+  isStopping?: boolean
   theme: Theme
   onCopy: () => void
   onCopyCurl: () => void
@@ -1419,11 +1457,22 @@ function PortRow({
                 setShowShareMenu(false)
               }}
               onClose={() => setShowShareMenu(false)}
+              onCopyUrl={onCopy}
             />
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={onStop} className={`h-7 w-7 sm:h-8 sm:w-8 p-0 ${theme === 'dark' ? 'text-red-400 hover:text-red-300 hover:bg-red-900/20' : 'text-red-600 hover:text-red-700 hover:bg-red-50'}`}>
-          <Square className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onStop}
+          disabled={isStopping}
+          className={`h-7 w-7 sm:h-8 sm:w-8 p-0 ${theme === 'dark' ? 'text-red-400 hover:text-red-300 hover:bg-red-900/20' : 'text-red-600 hover:text-red-700 hover:bg-red-50'}`}
+        >
+          {isStopping ? (
+            <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+          ) : (
+            <Square className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          )}
         </Button>
       </div>
     </div>
@@ -1453,29 +1502,41 @@ function ShareMenu({
   port,
   theme,
   onShare,
-  onClose
+  onClose,
+  onCopyUrl
 }: {
   port: Port
   theme: Theme
   onShare: (mode: string, password?: string, expiresIn?: string) => void
   onClose: () => void
+  onCopyUrl: () => void
 }) {
   const [mode, setMode] = useState(port.share_mode)
   const [password, setPassword] = useState('')
   const [expiresIn, setExpiresIn] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+
+  const isValid = mode !== 'password' || password.length > 0
+
+  const handleApply = (shouldCopy: boolean) => {
+    onShare(mode, mode === 'password' ? password : undefined, expiresIn || undefined)
+    if (shouldCopy) {
+      onCopyUrl()
+    }
+  }
 
   return (
-    <div className={`absolute right-0 top-full mt-1 w-64 rounded-lg shadow-lg border p-3 z-50 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+    <div className={`absolute right-0 top-full mt-1 w-72 rounded-xl shadow-lg border p-4 z-50 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <div className="space-y-3">
         <div>
-          <label className={`text-xs font-medium mb-1.5 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Sharing Mode</label>
+          <label className={`text-xs font-medium mb-2 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Sharing Mode</label>
           <div className="flex gap-1">
             {(['private', 'password', 'public'] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
                 className={`
-                  flex-1 px-2 py-1.5 text-xs font-medium rounded-md capitalize transition-colors
+                  flex-1 px-3 py-2 text-xs font-medium rounded-lg capitalize transition-colors
                   ${mode === m
                     ? theme === 'dark' ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'
                     : theme === 'dark' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
@@ -1489,24 +1550,33 @@ function ShareMenu({
 
         {mode === 'password' && (
           <div>
-            <label className={`text-xs font-medium mb-1.5 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password..."
-              className={`w-full px-2.5 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-900 border-gray-600 text-gray-100 focus:ring-gray-500' : 'border-gray-200 focus:ring-gray-900'}`}
-            />
+            <label className={`text-xs font-medium mb-2 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password..."
+                className={`w-full px-3 py-2 pr-10 text-sm border rounded-lg focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-900 border-gray-600 text-gray-100 focus:ring-gray-500' : 'border-gray-200 focus:ring-gray-400'}`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded ${theme === 'dark' ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
         )}
 
         {mode !== 'private' && (
           <div>
-            <label className={`text-xs font-medium mb-1.5 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Expires</label>
+            <label className={`text-xs font-medium mb-2 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Expires</label>
             <select
               value={expiresIn}
               onChange={(e) => setExpiresIn(e.target.value)}
-              className={`w-full px-2.5 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-900 border-gray-600 text-gray-100 focus:ring-gray-500' : 'border-gray-200 focus:ring-gray-900 bg-white'}`}
+              className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-900 border-gray-600 text-gray-100 focus:ring-gray-500' : 'border-gray-200 focus:ring-gray-400 bg-white'}`}
             >
               <option value="">Never</option>
               <option value="1h">1 hour</option>
@@ -1517,15 +1587,24 @@ function ShareMenu({
           </div>
         )}
 
-        <div className="flex gap-2 pt-1">
-          <Button variant="outline" size="sm" onClick={onClose} className="flex-1">
+        <div className={`flex gap-2 pt-2 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-100'}`}>
+          <Button variant="outline" size="sm" onClick={onClose} className="text-xs">
             Cancel
           </Button>
           <Button
+            variant="outline"
             size="sm"
-            onClick={() => onShare(mode, mode === 'password' ? password : undefined, expiresIn || undefined)}
-            className="flex-1"
-            disabled={mode === 'password' && !password}
+            onClick={() => handleApply(true)}
+            disabled={!isValid}
+            className="flex-1 text-xs"
+          >
+            Apply & Copy URL
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => handleApply(false)}
+            disabled={!isValid}
+            className="text-xs"
           >
             Apply
           </Button>
