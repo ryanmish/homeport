@@ -273,9 +273,9 @@ func (c *Client) PullWithDetails(repoPath string) (*PullResult, error) {
 
 	// Check for uncommitted changes first
 	status, err := c.GetStatus(repoPath)
-	if err == nil && status.HasChanges {
+	if err == nil && status.IsDirty {
 		result.Success = false
-		result.Message = fmt.Sprintf("Cannot pull: you have %d uncommitted change(s). Please commit or stash your changes first.", status.ModifiedCount+status.UntrackedCount)
+		result.Message = "Cannot pull: you have uncommitted changes. Please commit or stash your changes first."
 		return result, nil
 	}
 
