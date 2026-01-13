@@ -461,11 +461,6 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             display: none;
         }
 
-        .server-controls:has(.start-server-btn:not(.hidden)) .server-running-controls,
-        .server-controls:has(.server-running-controls:not(.active)) {
-            display: none;
-        }
-
         iframe {
             width: 100%%;
             height: calc(100%% - 56px);
