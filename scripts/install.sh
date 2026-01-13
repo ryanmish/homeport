@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+# Note: We don't use set -e because we need graceful error handling
 
 # Ensure we can read from terminal (important when script is piped)
 if [ ! -t 0 ]; then
@@ -282,14 +282,39 @@ HOMEPORT_DIR="$(dirname "$SCRIPT_DIR")"
 # Build homeportd first (needed for password hashing)
 echo "Preparing security module..."
 cd "$HOMEPORT_DIR"
-if ! command -v go &> /dev/null; then
+
+# Check if Go is available (check common locations)
+GO_CMD=""
+if command -v go &> /dev/null; then
+    GO_CMD="go"
+elif [ -x "/usr/local/go/bin/go" ]; then
+    GO_CMD="/usr/local/go/bin/go"
+fi
+
+if [ -z "$GO_CMD" ]; then
     # Install Go if not present
     echo "Installing Go..."
-    GO_VERSION="1.21.5"
-    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" | sudo tar -C /usr/local -xzf -
-    export PATH=$PATH:/usr/local/go/bin
+    GO_VERSION="1.22.0"
+    ARCH=$(dpkg --print-architecture)
+    if ! curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" -o /tmp/go.tar.gz; then
+        echo -e "${RED}Failed to download Go${NC}"
+        exit 1
+    fi
+    if ! sudo tar -C /usr/local -xzf /tmp/go.tar.gz; then
+        echo -e "${RED}Failed to install Go${NC}"
+        exit 1
+    fi
+    rm -f /tmp/go.tar.gz
+    GO_CMD="/usr/local/go/bin/go"
+    echo -e "${GREEN}[*]${NC} Go installed"
 fi
-go build -o /tmp/homeportd-setup ./cmd/homeportd 2>/dev/null
+
+# Build the password hashing tool
+echo "Building security module..."
+if ! $GO_CMD build -o /tmp/homeportd-setup ./cmd/homeportd; then
+    echo -e "${RED}Failed to build homeportd. Check Go installation.${NC}"
+    exit 1
+fi
 
 if [ "$PASSWORD_CHOICE" = "2" ]; then
     # Generate password
