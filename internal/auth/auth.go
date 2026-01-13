@@ -58,6 +58,13 @@ func (a *Auth) CheckPassword(password string) bool {
 	return err == nil
 }
 
+// SetPasswordHash updates the password hash at runtime
+func (a *Auth) SetPasswordHash(hash []byte) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.passwordHash = hash
+}
+
 // IsRateLimited checks if the IP has too many failed login attempts
 func (a *Auth) IsRateLimited(ip string) bool {
 	a.mu.Lock()

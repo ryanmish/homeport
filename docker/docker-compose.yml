@@ -7,6 +7,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: homeportd
     network_mode: host
+    pid: "host"  # Required to see processes from other containers for port-repo association
     volumes:
       - homeport-data:/srv/homeport/data
       - repos:/srv/homeport/repos
@@ -35,7 +36,9 @@ services:
 
   # Code Server (browser-based VS Code)
   code-server:
-    image: codercom/code-server:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.code-server
     container_name: code-server
     network_mode: host
     depends_on:
@@ -45,6 +48,7 @@ services:
       - repos:/home/coder/repos
       - code-server-data:/home/coder/.local/share/code-server
       - code-server-config:/home/coder/.config/code-server
+      - ./code-server-settings.json:/home/coder/.local/share/code-server/User/settings.json:ro
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD:-}
       - DOCKER_USER=coder
@@ -52,6 +56,7 @@ services:
       - --bind-addr=127.0.0.1:8443
       - --auth=${CODE_SERVER_AUTH:-none}
       - --disable-telemetry
+      - --disable-getting-started-override
       - /home/coder/repos
     restart: unless-stopped
 

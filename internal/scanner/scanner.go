@@ -71,27 +71,37 @@ func (s *Scanner) findRepoForPID(pid int) string {
 		return ""
 	}
 
-	// Normalize paths
+	// Normalize path
 	cwd = filepath.Clean(cwd)
-	reposDir := filepath.Clean(s.reposDir)
 
-	// Check if CWD is under repos directory
-	if !strings.HasPrefix(cwd, reposDir) {
-		return ""
+	// Check multiple possible repo directory patterns
+	// This handles cross-container scenarios where paths differ:
+	// - homeportd sees /srv/homeport/repos/
+	// - code-server uses /home/coder/repos/
+	repoPaths := []string{
+		filepath.Clean(s.reposDir),
+		"/home/coder/repos",
+		"/srv/homeport/repos",
 	}
 
-	// Extract repo name (first directory under reposDir)
-	rel, err := filepath.Rel(reposDir, cwd)
-	if err != nil {
-		return ""
+	for _, reposDir := range repoPaths {
+		if strings.HasPrefix(cwd, reposDir) {
+			// Extract repo name (first directory under reposDir)
+			rel, err := filepath.Rel(reposDir, cwd)
+			if err != nil {
+				continue
+			}
+
+			parts := strings.Split(rel, string(os.PathSeparator))
+			if len(parts) == 0 || parts[0] == "." || parts[0] == "" {
+				continue
+			}
+
+			return parts[0]
+		}
 	}
 
-	parts := strings.Split(rel, string(os.PathSeparator))
-	if len(parts) == 0 || parts[0] == "." || parts[0] == "" {
-		return ""
-	}
-
-	return parts[0]
+	return ""
 }
 
 // RawPort represents a detected listening port

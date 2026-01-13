@@ -1,0 +1,18 @@
+FROM codercom/code-server:latest
+
+USER root
+
+# Install Node.js, npm, and common dev tools
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install common global packages
+RUN npm install -g pnpm yarn
+
+USER coder

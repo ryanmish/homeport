@@ -43,16 +43,21 @@ func (s *Server) portAuthMiddleware(next http.Handler) http.Handler {
 			portInfo.ShareMode = "private"
 		}
 
+		clientIP := getClientIP(r)
+		userAgent := r.UserAgent()
+
 		// Check sharing mode
 		switch portInfo.ShareMode {
 		case "public":
-			// No auth required
+			// No auth required - log access and continue
+			s.store.LogAccess(port, clientIP, userAgent, false)
 			next.ServeHTTP(w, r)
 
 		case "private":
 			// Check for valid homeport session cookie (same as main app auth)
 			cookie, err := r.Cookie(auth.SessionCookieName)
 			if err == nil && s.auth.ValidateSession(cookie.Value) {
+				s.store.LogAccess(port, clientIP, userAgent, true)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -62,6 +67,7 @@ func (s *Server) portAuthMiddleware(next http.Handler) http.Handler {
 		case "password":
 			// Check for valid port-specific auth cookie
 			if share.ValidateAuthCookie(r, port) {
+				s.store.LogAccess(port, clientIP, userAgent, true)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -73,6 +79,7 @@ func (s *Server) portAuthMiddleware(next http.Handler) http.Handler {
 			// Unknown mode, treat as private and check session
 			cookie, err := r.Cookie(auth.SessionCookieName)
 			if err == nil && s.auth.ValidateSession(cookie.Value) {
+				s.store.LogAccess(port, clientIP, userAgent, true)
 				next.ServeHTTP(w, r)
 				return
 			}

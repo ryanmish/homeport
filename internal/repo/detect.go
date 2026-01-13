@@ -14,22 +14,25 @@ type PackageJSON struct {
 
 // RepoInfo contains detected information about a repository
 type RepoInfo struct {
-	HasPackageJSON  bool              `json:"has_package_json"`
-	HasNodeModules  bool              `json:"has_node_modules"`
-	NeedsInstall    bool              `json:"needs_install"`
-	DetectedCommand string            `json:"detected_command,omitempty"`
+	HasPackageJSON   bool              `json:"has_package_json"`
+	HasNodeModules   bool              `json:"has_node_modules"`
+	NeedsInstall     bool              `json:"needs_install"`
+	DetectedCommand  string            `json:"detected_command,omitempty"`
 	AvailableScripts map[string]string `json:"available_scripts,omitempty"`
-	PackageManager  string            `json:"package_manager,omitempty"` // npm, yarn, pnpm, bun
+	PackageManager   string            `json:"package_manager,omitempty"` // npm, yarn, pnpm, bun
+	ProjectType      string            `json:"project_type,omitempty"`    // node, python, rust, go
+	InstallCommand   string            `json:"install_command,omitempty"` // Full install command
 }
 
 // Detect analyzes a repository and returns information about it
 func Detect(repoPath string) (*RepoInfo, error) {
 	info := &RepoInfo{}
 
-	// Check for package.json
+	// Check for Node.js project (package.json)
 	packageJSONPath := filepath.Join(repoPath, "package.json")
 	if _, err := os.Stat(packageJSONPath); err == nil {
 		info.HasPackageJSON = true
+		info.ProjectType = "node"
 
 		// Parse package.json
 		data, err := os.ReadFile(packageJSONPath)
@@ -40,21 +43,112 @@ func Detect(repoPath string) (*RepoInfo, error) {
 				info.DetectedCommand = detectStartCommand(pkg.Scripts)
 			}
 		}
+
+		// Check for node_modules
+		nodeModulesPath := filepath.Join(repoPath, "node_modules")
+		if stat, err := os.Stat(nodeModulesPath); err == nil && stat.IsDir() {
+			info.HasNodeModules = true
+		}
+
+		// Needs install if package.json exists but no node_modules
+		info.NeedsInstall = !info.HasNodeModules
+
+		// Detect package manager
+		info.PackageManager = detectPackageManager(repoPath)
+		info.InstallCommand = info.GetInstallCommand()
+
+		return info, nil
 	}
 
-	// Check for node_modules
-	nodeModulesPath := filepath.Join(repoPath, "node_modules")
-	if stat, err := os.Stat(nodeModulesPath); err == nil && stat.IsDir() {
-		info.HasNodeModules = true
+	// Check for Python project
+	if hasPythonProject(repoPath) {
+		info.ProjectType = "python"
+		info.PackageManager, info.InstallCommand = detectPythonPackageManager(repoPath)
+		info.NeedsInstall = !hasPythonVenv(repoPath)
+		return info, nil
 	}
 
-	// Needs install if package.json exists but no node_modules
-	info.NeedsInstall = info.HasPackageJSON && !info.HasNodeModules
+	// Check for Rust project (Cargo.toml)
+	if _, err := os.Stat(filepath.Join(repoPath, "Cargo.toml")); err == nil {
+		info.ProjectType = "rust"
+		info.PackageManager = "cargo"
+		info.InstallCommand = "cargo build"
+		// Rust doesn't really have an "install" step in the same way
+		info.NeedsInstall = false
+		return info, nil
+	}
 
-	// Detect package manager
-	info.PackageManager = detectPackageManager(repoPath)
+	// Check for Go project (go.mod)
+	if _, err := os.Stat(filepath.Join(repoPath, "go.mod")); err == nil {
+		info.ProjectType = "go"
+		info.PackageManager = "go"
+		info.InstallCommand = "go mod download"
+		info.NeedsInstall = false // Go downloads deps on build
+		return info, nil
+	}
 
 	return info, nil
+}
+
+// hasPythonProject checks if this is a Python project
+func hasPythonProject(repoPath string) bool {
+	pythonFiles := []string{
+		"requirements.txt",
+		"pyproject.toml",
+		"Pipfile",
+		"setup.py",
+		"setup.cfg",
+	}
+	for _, f := range pythonFiles {
+		if _, err := os.Stat(filepath.Join(repoPath, f)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// hasPythonVenv checks if a virtual environment exists
+func hasPythonVenv(repoPath string) bool {
+	venvDirs := []string{"venv", ".venv", "env", ".env"}
+	for _, d := range venvDirs {
+		if stat, err := os.Stat(filepath.Join(repoPath, d)); err == nil && stat.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// detectPythonPackageManager determines which Python package manager to use
+func detectPythonPackageManager(repoPath string) (manager, installCmd string) {
+	// Poetry (pyproject.toml with [tool.poetry])
+	if _, err := os.Stat(filepath.Join(repoPath, "poetry.lock")); err == nil {
+		return "poetry", "poetry install"
+	}
+
+	// Pipenv
+	if _, err := os.Stat(filepath.Join(repoPath, "Pipfile.lock")); err == nil {
+		return "pipenv", "pipenv install"
+	}
+	if _, err := os.Stat(filepath.Join(repoPath, "Pipfile")); err == nil {
+		return "pipenv", "pipenv install"
+	}
+
+	// uv (modern Python package installer)
+	if _, err := os.Stat(filepath.Join(repoPath, "uv.lock")); err == nil {
+		return "uv", "uv sync"
+	}
+
+	// Default to pip with requirements.txt
+	if _, err := os.Stat(filepath.Join(repoPath, "requirements.txt")); err == nil {
+		return "pip", "pip install -r requirements.txt"
+	}
+
+	// pyproject.toml without poetry
+	if _, err := os.Stat(filepath.Join(repoPath, "pyproject.toml")); err == nil {
+		return "pip", "pip install -e ."
+	}
+
+	return "pip", "pip install -r requirements.txt"
 }
 
 // detectStartCommand returns the best start command based on package.json scripts

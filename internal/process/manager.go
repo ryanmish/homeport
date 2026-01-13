@@ -126,11 +126,14 @@ func (m *Manager) Stop(repoID string) error {
 
 	proc, exists := m.processes[repoID]
 	if !exists {
-		return fmt.Errorf("no process found for repo")
+		// Process not in our map - nothing to stop from manager's perspective
+		// The handler should try killing by PID if it has port info
+		return nil
 	}
 
 	if proc.Status != "running" {
-		return fmt.Errorf("process is not running")
+		delete(m.processes, repoID)
+		return nil
 	}
 
 	// Kill the process group (includes all child processes)
@@ -161,6 +164,37 @@ func (m *Manager) Stop(repoID string) error {
 	}
 
 	proc.Status = "stopped"
+	delete(m.processes, repoID)
+	return nil
+}
+
+// StopByPID stops a process by its PID
+func (m *Manager) StopByPID(pid int) error {
+	if pid <= 0 {
+		return fmt.Errorf("invalid PID")
+	}
+
+	// Kill the process group (includes all child processes)
+	pgid, err := syscall.Getpgid(pid)
+	if err == nil {
+		syscall.Kill(-pgid, syscall.SIGTERM)
+	} else {
+		// Try killing just the process
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			return fmt.Errorf("process not found: %d", pid)
+		}
+		proc.Signal(syscall.SIGTERM)
+	}
+
+	// Give it 3 seconds then force kill
+	time.Sleep(3 * time.Second)
+
+	// Check if still running and force kill
+	if pgid, err := syscall.Getpgid(pid); err == nil {
+		syscall.Kill(-pgid, syscall.SIGKILL)
+	}
+
 	return nil
 }
 

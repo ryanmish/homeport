@@ -74,6 +74,14 @@ func (s *Server) setupRouter() {
 	r.Post("/login", s.handleLogin)
 	r.Get("/logout", s.handleLogout)
 
+	// Dynamic port proxy - handles its own auth via portAuthMiddleware
+	// Must be outside protected group so public/password ports work without Homeport login
+	r.Route("/{port:[0-9]+}", func(r chi.Router) {
+		r.Use(s.portAuthMiddleware)
+		r.HandleFunc("/*", s.handleProxyDirect)
+		r.HandleFunc("/", s.handleProxyDirect)
+	})
+
 	// Protected routes (auth required)
 	r.Group(func(r chi.Router) {
 		r.Use(s.auth.Middleware)
@@ -82,6 +90,8 @@ func (s *Server) setupRouter() {
 		r.Route("/api", func(r chi.Router) {
 			r.Get("/status", s.handleStatus)
 			r.Get("/ports", s.handleListPorts)
+			r.Get("/access-logs", s.handleAccessLogs)
+			r.Get("/access-logs/{port}", s.handlePortAccessLogs)
 
 			r.Route("/repos", func(r chi.Router) {
 				r.Get("/", s.handleListRepos)
@@ -131,23 +141,14 @@ func (s *Server) setupRouter() {
 			r.HandleFunc("/", s.handleCodeServerProxy)
 		})
 
-		// Dynamic port proxy - matches /{port}/* patterns
-		// This must come after /api to avoid conflicts
-		r.Route("/{port:[0-9]+}", func(r chi.Router) {
-			r.Use(s.portAuthMiddleware)
-			r.HandleFunc("/*", s.handleProxyDirect)
-			r.HandleFunc("/", s.handleProxyDirect)
-		})
-
 		// Serve UI at root
 		r.Get("/", s.handleServeUI)
-
-		// Referer-based fallback for SPA assets
-		// When a request comes in without a port prefix (e.g., /@vite/client),
-		// check the Referer header to determine which port to proxy to.
-		// This allows path-based routing to work with SPAs that use absolute paths.
-		r.HandleFunc("/*", s.handleRefererFallback)
 	})
+
+	// Referer-based fallback for SPA assets (catch-all, must be last)
+	// Handles requests like /_next/static/... that don't have a port prefix
+	// Uses same auth logic as port proxy based on the port's sharing mode
+	r.HandleFunc("/*", s.handleRefererFallback)
 
 	s.router = r
 }
@@ -199,6 +200,11 @@ func (s *Server) handleRefererFallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Skip system ports to avoid infinite loops (8080 = homeportd, 8443 = code-server)
+	if port == 8080 || port == 8443 {
+		port = 0
+	}
+
 	// If still no port, serve UI
 	if port == 0 {
 		// Serve built UI from configured directory
@@ -233,13 +239,11 @@ func (s *Server) handleRefererFallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "private":
-		// Check for Cloudflare Access header in production
-		if !s.cfg.DevMode {
-			cfEmail := r.Header.Get("CF-Access-Authenticated-User-Email")
-			if cfEmail == "" {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
+		// Check for valid homeport session cookie
+		cookie, err := r.Cookie(auth.SessionCookieName)
+		if err != nil || !s.auth.ValidateSession(cookie.Value) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
 		}
 	}
 
@@ -268,10 +272,21 @@ func (s *Server) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) {
 func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) {
 	// Build iframe URL preserving query params but adding _wrapped=1
 	iframeSrc := "/code/?_wrapped=1"
-	if folder := r.URL.Query().Get("folder"); folder != "" {
+	folder := r.URL.Query().Get("folder")
+	if folder != "" {
 		iframeSrc += "&folder=" + folder
 	} else {
 		iframeSrc += "&folder=/home/coder/repos"
+		folder = "/home/coder/repos"
+	}
+
+	// Extract repo name from folder path
+	repoName := ""
+	if strings.Contains(folder, "/repos/") {
+		parts := strings.Split(folder, "/repos/")
+		if len(parts) > 1 {
+			repoName = strings.Split(parts[1], "/")[0]
+		}
 	}
 
 	wrapper := fmt.Sprintf(`<!DOCTYPE html>
@@ -282,65 +297,523 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
     <title>VS Code - Homeport</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { height: 100%%; overflow: hidden; }
-        .homeport-nav {
-            height: 36px;
-            background: #1e1e1e;
-            border-bottom: 1px solid #333;
+        html, body { height: 100%%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+        .homeport-header {
+            height: 48px;
+            background: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
             display: flex;
             align-items: center;
-            padding: 0 12px;
+            justify-content: space-between;
+            padding: 0 16px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
             gap: 12px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .logo-box {
+            width: 32px;
+            height: 32px;
+            background: #111827;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-box svg {
+            width: 18px;
+            height: 18px;
+            color: white;
+        }
+
+        .brand {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .brand-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+            text-decoration: none;
+        }
+
+        .brand-name:hover {
+            color: #3b82f6;
+        }
+
+        .brand-version {
+            font-size: 11px;
+            color: #9ca3af;
+            font-family: monospace;
+        }
+
+        .nav-breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 16px;
+            padding-left: 16px;
+            border-left: 1px solid #e5e7eb;
+        }
+
+        .nav-sep {
+            color: #9ca3af;
+        }
+
+        .nav-item {
+            color: #6b7280;
             font-size: 13px;
         }
-        .homeport-nav a {
-            color: #cccccc;
-            text-decoration: none;
+
+        .nav-item.active {
+            color: #111827;
+            font-weight: 500;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
             display: flex;
             align-items: center;
             gap: 6px;
-            padding: 4px 8px;
-            border-radius: 4px;
-            transition: background 0.15s;
+            border: 1px solid #e5e7eb;
+            background: white;
+            color: #374151;
         }
-        .homeport-nav a:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
+
+        .header-btn:hover {
+            background: #f9fafb;
+            border-color: #d1d5db;
         }
-        .homeport-nav .logo {
-            font-weight: 600;
-            color: #3b82f6;
+
+        .header-btn.primary {
+            background: #111827;
+            color: white;
+            border-color: #111827;
         }
-        .homeport-nav .sep {
-            color: #666;
+
+        .header-btn.primary:hover {
+            background: #1f2937;
         }
-        .homeport-nav svg {
+
+        .header-btn svg {
             width: 14px;
             height: 14px;
         }
+
         iframe {
             width: 100%%;
-            height: calc(100%% - 36px);
+            height: calc(100%% - 48px);
             border: none;
+        }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 60px;
+            right: 16px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 320px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .toast-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            font-size: 13px;
+            color: #111827;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toast-title .dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%%, 100%% { opacity: 1; }
+            50%% { opacity: 0.5; }
+        }
+
+        .toast-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #9ca3af;
+            padding: 4px;
+        }
+
+        .toast-close:hover {
+            color: #6b7280;
+        }
+
+        .toast-body {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .toast-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .toast-btn {
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1px solid #e5e7eb;
+            background: white;
+            color: #374151;
+        }
+
+        .toast-btn:hover {
+            background: #f9fafb;
+        }
+
+        .toast-btn.primary {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        .toast-btn.primary:hover {
+            background: #2563eb;
+        }
+
+        /* Share modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            min-width: 360px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .share-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .share-option {
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .share-option:hover {
+            border-color: #3b82f6;
+        }
+
+        .share-option.active {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+
+        .share-option-title {
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .share-option-desc {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 2px;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
         }
     </style>
 </head>
 <body>
-    <nav class="homeport-nav">
-        <a href="/" class="logo">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-            Homeport
-        </a>
-        <span class="sep">/</span>
-        <span style="color: #ccc;">VS Code</span>
-    </nav>
+    <header class="homeport-header">
+        <div class="header-left">
+            <a href="/" style="display: flex; align-items: center; gap: 12px; text-decoration: none;">
+                <div class="logo-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        <polyline points="9 22 9 12 15 12 15 22"/>
+                    </svg>
+                </div>
+                <div class="brand">
+                    <span class="brand-name">Homeport</span>
+                    <span class="brand-version">v0.1.0</span>
+                </div>
+            </a>
+            <div class="nav-breadcrumb">
+                <span class="nav-sep">/</span>
+                <span class="nav-item active">VS Code</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <a href="/" class="header-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+                Dashboard
+            </a>
+        </div>
+    </header>
+
+    <div class="toast-container" id="toasts"></div>
+
     <iframe src="%s" allow="clipboard-read; clipboard-write"></iframe>
+
+    <script>
+        const REPO_NAME = '%s';
+        const EXTERNAL_URL = '%s';
+        let knownPorts = new Set();
+        let dismissedPorts = new Set();
+
+        // Poll for new ports
+        async function checkPorts() {
+            try {
+                const resp = await fetch('/api/ports', { credentials: 'include' });
+                if (!resp.ok) return;
+                const ports = await resp.json();
+
+                // Filter to ports for this repo (or unknown ports in this folder's range)
+                const relevantPorts = ports.filter(p => {
+                    // Skip system ports (homeportd and code-server)
+                    if (p.port === 8080 || p.port === 8443) return false;
+                    // Include if it's for this repo or if repo is missing/empty and it's a dev port
+                    return p.repo_id === REPO_NAME ||
+                           (!p.repo_id && p.port >= 3000 && p.port <= 9999);
+                });
+
+                for (const port of relevantPorts) {
+                    if (!knownPorts.has(port.port) && !dismissedPorts.has(port.port)) {
+                        knownPorts.add(port.port);
+                        showPortToast(port);
+                    }
+                }
+
+                // Remove ports that are no longer running
+                const currentPorts = new Set(relevantPorts.map(p => p.port));
+                knownPorts = new Set([...knownPorts].filter(p => currentPorts.has(p)));
+            } catch (e) {
+                console.error('Port check failed:', e);
+            }
+        }
+
+        function showPortToast(port) {
+            const container = document.getElementById('toasts');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.id = 'toast-' + port.port;
+
+            const url = EXTERNAL_URL + '/' + port.port + '/';
+            const modeText = port.share_mode === 'private' ? 'privately' :
+                            port.share_mode === 'public' ? 'publicly' : 'with password';
+
+            toast.innerHTML = ` + "`" + `
+                <div class="toast-header">
+                    <div class="toast-title">
+                        <span class="dot"></span>
+                        Port ${port.port} is running
+                    </div>
+                    <button class="toast-close" onclick="dismissToast(${port.port})">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="toast-body">
+                    ${port.process_name || 'Dev server'} • Currently accessible ${modeText}
+                </div>
+                <div class="toast-actions">
+                    <button class="toast-btn primary" onclick="window.open('${url}', '_blank')">
+                        Open
+                    </button>
+                    <button class="toast-btn" onclick="copyUrl('${url}')">
+                        Copy URL
+                    </button>
+                    <button class="toast-btn" onclick="showShareModal(${port.port}, '${port.share_mode}')">
+                        Share Settings
+                    </button>
+                </div>
+            ` + "`" + `;
+
+            container.appendChild(toast);
+
+            // Auto-dismiss after 30 seconds
+            setTimeout(() => {
+                if (document.getElementById('toast-' + port.port)) {
+                    dismissToast(port.port);
+                }
+            }, 30000);
+        }
+
+        function dismissToast(port) {
+            const toast = document.getElementById('toast-' + port);
+            if (toast) {
+                dismissedPorts.add(port);
+                toast.remove();
+            }
+        }
+
+        function copyUrl(url) {
+            navigator.clipboard.writeText(url);
+            // Brief visual feedback could be added here
+        }
+
+        let shareModal = null;
+
+        function showShareModal(port, currentMode) {
+            if (shareModal) shareModal.remove();
+
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+            overlay.innerHTML = ` + "`" + `
+                <div class="modal">
+                    <div class="modal-title">Share Port ${port}</div>
+                    <div class="share-options">
+                        <div class="share-option ${currentMode === 'private' ? 'active' : ''}" onclick="selectShareMode(this, 'private')">
+                            <div class="share-option-title">🔒 Private</div>
+                            <div class="share-option-desc">Only accessible when logged into Homeport</div>
+                        </div>
+                        <div class="share-option ${currentMode === 'password' ? 'active' : ''}" onclick="selectShareMode(this, 'password')">
+                            <div class="share-option-title">🔑 Password</div>
+                            <div class="share-option-desc">Anyone with the password can access</div>
+                        </div>
+                        <div class="share-option ${currentMode === 'public' ? 'active' : ''}" onclick="selectShareMode(this, 'public')">
+                            <div class="share-option-title">🌐 Public</div>
+                            <div class="share-option-desc">Anyone with the link can access</div>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="toast-btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                        <button class="toast-btn primary" onclick="applyShareMode(${port})">Apply</button>
+                    </div>
+                </div>
+            ` + "`" + `;
+
+            document.body.appendChild(overlay);
+            shareModal = overlay;
+        }
+
+        let selectedMode = null;
+
+        function selectShareMode(el, mode) {
+            document.querySelectorAll('.share-option').forEach(o => o.classList.remove('active'));
+            el.classList.add('active');
+            selectedMode = mode;
+        }
+
+        async function applyShareMode(port) {
+            if (!selectedMode) {
+                shareModal.remove();
+                return;
+            }
+
+            try {
+                let body = { mode: selectedMode };
+                if (selectedMode === 'password') {
+                    const pw = prompt('Enter share password:');
+                    if (!pw) return;
+                    body.password = pw;
+                }
+
+                await fetch('/api/ports/' + port + '/share', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                shareModal.remove();
+                // Refresh the toast to show new mode
+                dismissedPorts.delete(port);
+                knownPorts.delete(port);
+                checkPorts();
+            } catch (e) {
+                console.error('Failed to update share mode:', e);
+            }
+        }
+
+        // Start polling
+        checkPorts();
+        setInterval(checkPorts, 3000);
+    </script>
 </body>
-</html>`, iframeSrc)
+</html>`, iframeSrc, repoName, s.cfg.ExternalURL)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(wrapper))
 }

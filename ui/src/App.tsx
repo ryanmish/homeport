@@ -688,9 +688,11 @@ function App() {
             )}
           </section>
 
-          {/* External Services - filtered to exclude homeportd */}
+          {/* External Services - filtered to exclude internal services */}
           {(() => {
-            const externalPorts = orphanPorts.filter(p => p.process_name !== 'homeportd')
+            const externalPorts = orphanPorts.filter(p =>
+              p.process_name !== 'homeportd' && p.port !== 8443 // 8443 is code-server, accessible via /code/
+            )
             if (externalPorts.length === 0) return null
             return (
               <section className="space-y-4">

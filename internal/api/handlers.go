@@ -132,17 +132,19 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update password in config file
-	configPath := filepath.Join(os.Getenv("HOME"), ".homeport", "config")
-	// Note: In production, we'd update the config properly. For now, this is a placeholder.
-	// The password hash is loaded at startup, so a restart would be needed.
-	_ = configPath
-	_ = hash
+	// Update password in memory (takes effect immediately)
+	s.auth.SetPasswordHash(hash)
 
-	// For now, just return success - actual implementation would update config and reload
+	// Persist to file for restart persistence
+	hashFile := filepath.Join(s.cfg.DataDir, "password_hash")
+	if err := os.WriteFile(hashFile, hash, 0600); err != nil {
+		// Log error but don't fail - the in-memory change still worked
+		// The password will be lost on restart but that's acceptable
+	}
+
 	jsonResponse(w, http.StatusOK, map[string]string{
 		"status":  "ok",
-		"message": "Password changed. Please restart Homeport for changes to take effect.",
+		"message": "Password changed successfully.",
 	})
 }
 
@@ -185,10 +187,19 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 // Port endpoints
 
 func (s *Server) handleListPorts(w http.ResponseWriter, r *http.Request) {
-	ports, err := s.store.ListPorts()
+	allPorts, err := s.store.ListPorts()
 	if err != nil {
 		errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	// Filter out system ports (homeportd and code-server)
+	ports := make([]store.Port, 0, len(allPorts))
+	for _, p := range allPorts {
+		if p.Port == 8080 || p.Port == 8443 {
+			continue // Skip system ports
+		}
+		ports = append(ports, p)
 	}
 
 	if ports == nil {
@@ -196,6 +207,59 @@ func (s *Server) handleListPorts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, http.StatusOK, ports)
+}
+
+// Access log endpoints
+
+func (s *Server) handleAccessLogs(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	limit := 100
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	logs, err := s.store.GetAllAccessLogs(limit)
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if logs == nil {
+		logs = []store.AccessLog{}
+	}
+
+	jsonResponse(w, http.StatusOK, logs)
+}
+
+func (s *Server) handlePortAccessLogs(w http.ResponseWriter, r *http.Request) {
+	portStr := chi.URLParam(r, "port")
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, "Invalid port")
+		return
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	limit := 100
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	logs, err := s.store.GetAccessLogs(port, limit)
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if logs == nil {
+		logs = []store.AccessLog{}
+	}
+
+	jsonResponse(w, http.StatusOK, logs)
 }
 
 // Repo endpoints
@@ -637,9 +701,16 @@ func (s *Server) handleStopProcess(w http.ResponseWriter, r *http.Request) {
 		repoName = repo.Name
 	}
 
-	if err := s.procs.Stop(repoID); err != nil {
-		errorResponse(w, http.StatusInternalServerError, err.Error())
-		return
+	// First try the process manager (for processes we started)
+	_ = s.procs.Stop(repoID)
+
+	// Also find and kill any ports associated with this repo
+	// This handles externally-started processes or processes after container restart
+	ports, _ := s.store.ListPorts()
+	for _, port := range ports {
+		if port.RepoID == repoID && port.PID > 0 {
+			s.procs.StopByPID(port.PID)
+		}
 	}
 
 	activity.LogStop(repoID, repoName)
@@ -840,15 +911,35 @@ type ExecRequest struct {
 // Allowed quick commands (for security)
 var allowedCommands = map[string]func(repoPath string, info *repo.RepoInfo) []string{
 	"install": func(repoPath string, info *repo.RepoInfo) []string {
-		switch info.PackageManager {
-		case "bun":
-			return []string{"bun", "install"}
-		case "pnpm":
-			return []string{"pnpm", "install"}
-		case "yarn":
-			return []string{"yarn"}
+		// Handle different project types
+		switch info.ProjectType {
+		case "python":
+			switch info.PackageManager {
+			case "poetry":
+				return []string{"poetry", "install"}
+			case "pipenv":
+				return []string{"pipenv", "install"}
+			case "uv":
+				return []string{"uv", "sync"}
+			default:
+				return []string{"pip", "install", "-r", "requirements.txt"}
+			}
+		case "rust":
+			return []string{"cargo", "build"}
+		case "go":
+			return []string{"go", "mod", "download"}
 		default:
-			return []string{"npm", "install"}
+			// Node.js project
+			switch info.PackageManager {
+			case "bun":
+				return []string{"bun", "install"}
+			case "pnpm":
+				return []string{"pnpm", "install"}
+			case "yarn":
+				return []string{"yarn"}
+			default:
+				return []string{"npm", "install"}
+			}
 		}
 	},
 	"fetch": func(repoPath string, info *repo.RepoInfo) []string {

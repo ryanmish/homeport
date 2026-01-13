@@ -243,3 +243,53 @@ func (s *Store) CleanupStalePorts(before time.Time) error {
 	_, err := s.db.Exec(`DELETE FROM ports WHERE last_seen < ?`, before)
 	return err
 }
+
+// Access log operations
+
+func (s *Store) LogAccess(port int, ip string, userAgent string, authenticated bool) error {
+	_, err := s.db.Exec(`INSERT INTO access_logs (port, ip, user_agent, authenticated) VALUES (?, ?, ?, ?)`,
+		port, ip, userAgent, authenticated)
+	return err
+}
+
+func (s *Store) GetAccessLogs(port int, limit int) ([]AccessLog, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`SELECT id, port, ip, user_agent, timestamp, authenticated FROM access_logs WHERE port = ? ORDER BY timestamp DESC LIMIT ?`, port, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []AccessLog
+	for rows.Next() {
+		var log AccessLog
+		if err := rows.Scan(&log.ID, &log.Port, &log.IP, &log.UserAgent, &log.Timestamp, &log.Authenticated); err != nil {
+			return nil, err
+		}
+		logs = append(logs, log)
+	}
+	return logs, nil
+}
+
+func (s *Store) GetAllAccessLogs(limit int) ([]AccessLog, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`SELECT id, port, ip, user_agent, timestamp, authenticated FROM access_logs ORDER BY timestamp DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []AccessLog
+	for rows.Next() {
+		var log AccessLog
+		if err := rows.Scan(&log.ID, &log.Port, &log.IP, &log.UserAgent, &log.Timestamp, &log.Authenticated); err != nil {
+			return nil, err
+		}
+		logs = append(logs, log)
+	}
+	return logs, nil
+}

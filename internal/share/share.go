@@ -94,7 +94,7 @@ func SetAuthCookie(w http.ResponseWriter, port int, duration time.Duration) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     fmt.Sprintf("homeport_auth_%d", port),
 		Value:    value,
-		Path:     fmt.Sprintf("/%d", port),
+		Path:     "/", // Must be root for referer-based asset requests
 		Expires:  expires,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
