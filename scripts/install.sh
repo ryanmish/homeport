@@ -283,20 +283,54 @@ HOMEPORT_DIR="$(dirname "$SCRIPT_DIR")"
 echo "Preparing security module..."
 cd "$HOMEPORT_DIR"
 
-# Check if Go is available (check common locations)
+# Required Go version
+GO_REQUIRED_MAJOR=1
+GO_REQUIRED_MINOR=22
+GO_INSTALL_VERSION="1.22.10"
+
+# Function to check if Go version is sufficient
+check_go_version() {
+    local go_path="$1"
+    local version_output=$("$go_path" version 2>/dev/null)
+    local version=$(echo "$version_output" | sed -n 's/.*go\([0-9]*\)\.\([0-9]*\).*/\1.\2/p')
+
+    if [ -z "$version" ]; then
+        return 1
+    fi
+
+    local major=$(echo "$version" | cut -d. -f1)
+    local minor=$(echo "$version" | cut -d. -f2)
+
+    if [ "$major" -gt "$GO_REQUIRED_MAJOR" ]; then
+        return 0
+    elif [ "$major" -eq "$GO_REQUIRED_MAJOR" ] && [ "$minor" -ge "$GO_REQUIRED_MINOR" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Check if Go is available with sufficient version
 GO_CMD=""
-if command -v go &> /dev/null; then
-    GO_CMD="go"
-elif [ -x "/usr/local/go/bin/go" ]; then
-    GO_CMD="/usr/local/go/bin/go"
-fi
+for go_path in "go" "/usr/local/go/bin/go"; do
+    if command -v "$go_path" &>/dev/null 2>&1 || [ -x "$go_path" ]; then
+        if check_go_version "$go_path"; then
+            GO_CMD="$go_path"
+            break
+        fi
+    fi
+done
 
 if [ -z "$GO_CMD" ]; then
-    # Install Go if not present
-    echo "Installing Go..."
-    GO_VERSION="1.21.13"
+    # Need to install or upgrade Go
+    if [ -d "/usr/local/go" ]; then
+        echo "Upgrading Go (need >= $GO_REQUIRED_MAJOR.$GO_REQUIRED_MINOR)..."
+        sudo rm -rf /usr/local/go
+    else
+        echo "Installing Go..."
+    fi
+
     ARCH=$(dpkg --print-architecture)
-    if ! curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" -o /tmp/go.tar.gz; then
+    if ! curl -fsSL "https://go.dev/dl/go${GO_INSTALL_VERSION}.linux-${ARCH}.tar.gz" -o /tmp/go.tar.gz; then
         echo -e "${RED}Failed to download Go${NC}"
         exit 1
     fi
@@ -306,7 +340,7 @@ if [ -z "$GO_CMD" ]; then
     fi
     rm -f /tmp/go.tar.gz
     GO_CMD="/usr/local/go/bin/go"
-    echo -e "${GREEN}[*]${NC} Go installed"
+    echo -e "${GREEN}[*]${NC} Go $GO_INSTALL_VERSION installed"
 fi
 
 # Build the password hashing tool
