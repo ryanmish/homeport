@@ -311,7 +311,8 @@ fi
 
 # Build the password hashing tool
 echo "Building security module..."
-if ! $GO_CMD build -o /tmp/homeportd-setup ./cmd/homeportd; then
+# GOTOOLCHAIN=local prevents Go from trying to download a different toolchain
+if ! GOTOOLCHAIN=local $GO_CMD build -o /tmp/homeportd-setup ./cmd/homeportd; then
     echo -e "${RED}Failed to build homeportd. Check Go installation.${NC}"
     exit 1
 fi
