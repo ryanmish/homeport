@@ -402,11 +402,15 @@ sudo systemctl daemon-reload
 sudo systemctl enable homeport.service
 echo -e "${GREEN}[*]${NC} Homeport will start on boot"
 
-# Start cloudflared tunnel
+# Start cloudflared tunnel as a systemd service
 echo "Starting Cloudflare Tunnel..."
 sudo cloudflared service install 2>/dev/null || true
 sudo systemctl enable cloudflared 2>/dev/null || true
-sudo systemctl start cloudflared 2>/dev/null || cloudflared tunnel run "$TUNNEL_NAME" &
+if ! sudo systemctl start cloudflared 2>/dev/null; then
+    # Fallback: run in background with no output
+    nohup cloudflared tunnel run "$TUNNEL_NAME" > /dev/null 2>&1 &
+    disown
+fi
 echo -e "${GREEN}[*]${NC} Tunnel running (will auto-start on boot)"
 
 # Install CLI
