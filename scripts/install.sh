@@ -422,13 +422,16 @@ CFGEOF
     # Generate cookie secret for persistent sessions
     COOKIE_SECRET=$(openssl rand -hex 32)
 
-    # Create .env file (use printf to avoid $ interpretation in bcrypt hash)
+    # Create .env file
+    # Escape $ in bcrypt hash (Docker Compose interprets $ as variable references)
+    # Use bracket expression [$] for portable matching, && doubles the match
+    ESCAPED_HASH=$(echo "$ADMIN_PASSWORD_HASH" | sed 's/[$]/&&/g')
     {
         echo "DOMAIN=$DOMAIN"
         echo "EXTERNAL_URL=https://$DOMAIN"
         echo "CODE_SERVER_AUTH=none"
         echo "COOKIE_SECRET=$COOKIE_SECRET"
-        printf 'ADMIN_PASSWORD_HASH=%s\n' "$ADMIN_PASSWORD_HASH"
+        echo "ADMIN_PASSWORD_HASH=$ESCAPED_HASH"
     } > "$HOMEPORT_DIR/docker/.env"
 
     echo "Building Docker images (this may take a few minutes)..."
