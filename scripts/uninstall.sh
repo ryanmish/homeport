@@ -61,6 +61,8 @@ echo "Closing tunnel service..."
 sudo systemctl stop cloudflared 2>/dev/null || true
 sudo systemctl disable cloudflared 2>/dev/null || true
 sudo cloudflared service uninstall 2>/dev/null || true
+# Kill any orphaned cloudflared processes
+pkill -9 cloudflared 2>/dev/null || true
 echo -e "${GREEN}[*]${NC} Tunnel service stopped"
 
 # Delete all tunnels and their DNS routes
