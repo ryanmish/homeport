@@ -309,12 +309,22 @@ echo -e "${GREEN}[*]${NC} Tunnel config created"
 # Set up DNS
 echo ""
 echo "Setting up DNS routing..."
-cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN" 2>/dev/null || echo "DNS route may already exist"
-echo -e "${GREEN}[*]${NC} DNS configured for $DOMAIN"
+
+# Add DNS route - if it fails, show the error
+if cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN" 2>&1; then
+    echo -e "${GREEN}[*]${NC} DNS configured for $DOMAIN"
+else
+    echo -e "${YELLOW}[!]${NC} DNS route for $DOMAIN may need manual setup in Cloudflare dashboard"
+    echo "    Add a CNAME record: $DOMAIN -> $TUNNEL_ID.cfargotunnel.com"
+fi
 
 if [ -n "$SSH_DOMAIN" ]; then
-    cloudflared tunnel route dns "$TUNNEL_NAME" "$SSH_DOMAIN" 2>/dev/null || echo "SSH DNS route may already exist"
-    echo -e "${GREEN}[*]${NC} DNS configured for $SSH_DOMAIN (SSH)"
+    if cloudflared tunnel route dns "$TUNNEL_NAME" "$SSH_DOMAIN" 2>&1; then
+        echo -e "${GREEN}[*]${NC} DNS configured for $SSH_DOMAIN (SSH)"
+    else
+        echo -e "${YELLOW}[!]${NC} DNS route for $SSH_DOMAIN may need manual setup in Cloudflare dashboard"
+        echo "    Add a CNAME record: $SSH_DOMAIN -> $TUNNEL_ID.cfargotunnel.com"
+    fi
 fi
 echo ""
 
