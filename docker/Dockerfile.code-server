@@ -16,3 +16,12 @@ RUN apt-get update && apt-get install -y \
 RUN npm install -g pnpm yarn
 
 USER coder
+
+# Create settings directory and copy custom settings
+RUN mkdir -p /home/coder/.local/share/code-server/User
+COPY --chown=coder:coder code-server-settings.json /home/coder/.local/share/code-server/User/settings.json
+
+# Create a workspace settings file that opens terminal on startup
+RUN mkdir -p /home/coder/repos/.vscode && \
+    echo '{"workbench.startupEditor":"none","terminal.integrated.tabs.defaultIcon":"terminal"}' > /home/coder/repos/.vscode/settings.json && \
+    chown -R coder:coder /home/coder/repos/.vscode

@@ -6,5 +6,28 @@
   "extensions.autoUpdate": false,
   "telemetry.telemetryLevel": "off",
   "remote.autoForwardPorts": false,
-  "remote.autoForwardPortsSource": "output"
+  "remote.autoForwardPortsSource": "output",
+
+  "terminal.integrated.defaultLocation": "view",
+  "terminal.integrated.tabs.enabled": true,
+
+  "workbench.panel.defaultLocation": "bottom",
+  "workbench.panel.opensMaximized": "never",
+
+  "github.copilot.enable": {
+    "*": false
+  },
+  "github.copilot.editor.enableAutoCompletions": false,
+  "chat.commandCenter.enabled": false,
+  "workbench.commandPalette.experimental.suggestCommands": false,
+
+  "editor.fontSize": 14,
+  "editor.tabSize": 2,
+  "editor.minimap.enabled": false,
+
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1000,
+
+  "git.autofetch": true,
+  "git.confirmSync": false
 }
