@@ -360,62 +360,49 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         .header-right {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
         }
 
-        .port-indicator {
-            display: none;
+        .server-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .server-status {
+            display: flex;
             align-items: center;
             gap: 8px;
             padding: 6px 12px;
-            background: #f3f4f6;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
             border-radius: 8px;
+            font-size: 13px;
+            color: #166534;
         }
 
-        .port-indicator.active {
-            display: flex;
-        }
-
-        .port-indicator .dot {
+        .server-status .dot {
             width: 8px;
             height: 8px;
-            background: #10b981;
+            background: #22c55e;
             border-radius: 50%%;
         }
 
-        .port-indicator .port-num {
+        .server-status .port-num {
             font-family: monospace;
-            font-size: 13px;
-            font-weight: 500;
-            color: #374151;
-        }
-
-        .port-indicator .share-btn {
-            padding: 4px;
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: #6b7280;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-        }
-
-        .port-indicator .share-btn:hover {
-            background: #e5e7eb;
-            color: #374151;
+            font-weight: 600;
         }
 
         .header-btn {
-            padding: 8px 14px;
+            padding: 8px 12px;
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.15s;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             border: 1px solid #e5e7eb;
             background: white;
             color: #374151;
@@ -427,9 +414,46 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             border-color: #d1d5db;
         }
 
+        .header-btn.primary {
+            background: #111827;
+            color: white;
+            border-color: #111827;
+        }
+
+        .header-btn.primary:hover {
+            background: #374151;
+        }
+
+        .header-btn.danger {
+            color: #dc2626;
+            border-color: #fecaca;
+        }
+
+        .header-btn.danger:hover {
+            background: #fef2f2;
+        }
+
         .header-btn svg {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
+        }
+
+        .start-server-btn {
+            display: flex;
+        }
+
+        .server-running-controls {
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .server-running-controls.active {
+            display: flex;
+        }
+
+        .start-server-btn.hidden {
+            display: none;
         }
 
         iframe {
@@ -632,21 +656,52 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             </div>
         </div>
         <div class="header-right">
-            <div class="port-indicator" id="portIndicator">
-                <span class="dot"></span>
-                <span class="port-num" id="portNum">:3000</span>
-                <button class="share-btn" id="shareBtn" title="Share settings">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="18" cy="5" r="3"/>
-                        <circle cx="6" cy="12" r="3"/>
-                        <circle cx="18" cy="19" r="3"/>
-                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            <div class="server-controls">
+                <button class="header-btn primary start-server-btn" id="startServerBtn" onclick="startServer()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
                     </svg>
+                    Start Server
                 </button>
+                <div class="server-running-controls" id="serverRunningControls">
+                    <div class="server-status">
+                        <span class="dot"></span>
+                        <span class="port-num" id="portNum">:3000</span>
+                    </div>
+                    <button class="header-btn" id="copyBtn" onclick="copyPortUrl()" title="Copy URL">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                    </button>
+                    <button class="header-btn" id="openBtn" onclick="openPort()" title="Open in new tab">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                    </button>
+                    <button class="header-btn" id="shareBtn" onclick="showShareModal(activePort.port, activePort.share_mode)" title="Share settings">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="18" cy="5" r="3"/>
+                            <circle cx="6" cy="12" r="3"/>
+                            <circle cx="18" cy="19" r="3"/>
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                        </svg>
+                    </button>
+                    <button class="header-btn danger" id="stopBtn" onclick="stopServer()" title="Stop server">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        </svg>
+                        Stop
+                    </button>
+                </div>
             </div>
             <a href="/" class="header-btn">
-                Dashboard
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                </svg>
             </a>
         </div>
     </header>
@@ -679,20 +734,20 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                            (!p.repo_id && p.port >= 3000 && p.port <= 9999);
                 });
 
-                // Update header port indicator with first active port
-                const indicator = document.getElementById('portIndicator');
+                // Update header controls
+                const startBtn = document.getElementById('startServerBtn');
+                const runningControls = document.getElementById('serverRunningControls');
                 const portNum = document.getElementById('portNum');
-                const shareBtn = document.getElementById('shareBtn');
 
                 if (relevantPorts.length > 0) {
-                    const firstPort = relevantPorts[0];
-                    activePort = firstPort;
-                    indicator.classList.add('active');
-                    portNum.textContent = ':' + firstPort.port;
-                    shareBtn.onclick = () => showShareModal(firstPort.port, firstPort.share_mode);
+                    activePort = relevantPorts[0];
+                    startBtn.classList.add('hidden');
+                    runningControls.classList.add('active');
+                    portNum.textContent = ':' + activePort.port;
                 } else {
                     activePort = null;
-                    indicator.classList.remove('active');
+                    startBtn.classList.remove('hidden');
+                    runningControls.classList.remove('active');
                 }
 
                 for (const port of relevantPorts) {
@@ -768,7 +823,59 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
 
         function copyUrl(url) {
             navigator.clipboard.writeText(url);
-            // Brief visual feedback could be added here
+        }
+
+        function copyPortUrl() {
+            if (!activePort) return;
+            const url = EXTERNAL_URL + '/' + activePort.port + '/';
+            navigator.clipboard.writeText(url);
+        }
+
+        function openPort() {
+            if (!activePort) return;
+            window.open('/' + activePort.port + '/', '_blank');
+        }
+
+        async function startServer() {
+            // Find repo ID from repo name
+            try {
+                const resp = await fetch('/api/repos', { credentials: 'include' });
+                if (!resp.ok) return;
+                const repos = await resp.json();
+                const repo = repos.find(r => r.name === REPO_NAME);
+                if (!repo) {
+                    alert('Repository not found. Please configure a start command in the dashboard.');
+                    return;
+                }
+                if (!repo.start_command) {
+                    alert('No start command configured. Please set one in the dashboard.');
+                    return;
+                }
+                await fetch('/api/repos/' + repo.id + '/start', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (e) {
+                console.error('Failed to start server:', e);
+            }
+        }
+
+        async function stopServer() {
+            if (!activePort) return;
+            try {
+                const resp = await fetch('/api/repos', { credentials: 'include' });
+                if (!resp.ok) return;
+                const repos = await resp.json();
+                const repo = repos.find(r => r.name === REPO_NAME);
+                if (repo) {
+                    await fetch('/api/repos/' + repo.id + '/stop', {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to stop server:', e);
+            }
         }
 
         let shareModal = null;
@@ -785,15 +892,15 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                     <div class="modal-title">Share Port ${port}</div>
                     <div class="share-options">
                         <div class="share-option ${currentMode === 'private' ? 'active' : ''}" onclick="selectShareMode(this, 'private')">
-                            <div class="share-option-title">🔒 Private</div>
+                            <div class="share-option-title">Private</div>
                             <div class="share-option-desc">Only accessible when logged into Homeport</div>
                         </div>
                         <div class="share-option ${currentMode === 'password' ? 'active' : ''}" onclick="selectShareMode(this, 'password')">
-                            <div class="share-option-title">🔑 Password</div>
+                            <div class="share-option-title">Password</div>
                             <div class="share-option-desc">Anyone with the password can access</div>
                         </div>
                         <div class="share-option ${currentMode === 'public' ? 'active' : ''}" onclick="selectShareMode(this, 'public')">
-                            <div class="share-option-title">🌐 Public</div>
+                            <div class="share-option-title">Public</div>
                             <div class="share-option-desc">Anyone with the link can access</div>
                         </div>
                     </div>

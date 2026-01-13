@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, createContext } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Toaster, toast } from '@/components/ui/sonner'
 import { api, type Repo, type Port, type Status, type GitHubRepo, type GitStatus, type RepoInfo, type BranchInfo, type UpdateInfo, type Process, type LogEntry, type ActivityEntry } from '@/lib/api'
 import { Logo } from '@/components/Logo'
 import {
@@ -58,15 +59,6 @@ const ThemeContext = createContext<{ theme: Theme; toggleTheme: () => void }>({
   toggleTheme: () => {},
 })
 
-// Toast notification system
-type Toast = {
-  id: number
-  message: string
-  type: 'success' | 'error' | 'info'
-}
-
-let toastId = 0
-
 function App() {
   const [status, setStatus] = useState<Status | null>(null)
   const [repos, setRepos] = useState<Repo[]>([])
@@ -77,7 +69,6 @@ function App() {
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [toasts, setToasts] = useState<Toast[]>([])
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('theme') as Theme) || 'light'
@@ -114,14 +105,7 @@ function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
-  const addToast = useCallback((message: string, type: Toast['type'] = 'success') => {
-    const id = ++toastId
-    setToasts(prev => [...prev, { id, message, type }])
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id))
-    }, 3000)
-  }, [])
-
+  
   const fetchData = async () => {
     try {
       const [statusData, reposData, portsData, processesData] = await Promise.all([
@@ -225,14 +209,14 @@ function App() {
   const copyUrl = (port: number) => {
     const url = `${status?.config.external_url || window.location.origin}/${port}/`
     navigator.clipboard.writeText(url)
-    addToast('URL copied to clipboard')
+    toast.success('URL copied to clipboard')
   }
 
   const copyCurl = (port: number) => {
     const url = `${status?.config.external_url || window.location.origin}/${port}/`
     const curl = `curl -X GET "${url}"`
     navigator.clipboard.writeText(curl)
-    addToast('curl command copied')
+    toast.success('curl command copied')
   }
 
   const openPort = (port: number) => {
@@ -242,10 +226,10 @@ function App() {
   const handleShare = async (port: number, mode: string, password?: string, expiresIn?: string) => {
     try {
       const result = await api.sharePort(port, mode, password, expiresIn)
-      addToast(`Port ${port} shared as ${mode}${result.expires_at ? ' (expires ' + formatRelativeTime(result.expires_at) + ')' : ''}`)
+      toast.success(`Port ${port} shared as ${mode}${result.expires_at ? ' (expires ' + formatRelativeTime(result.expires_at) + ')' : ''}`)
       fetchData()
     } catch (err) {
-      addToast('Failed to share port', 'error')
+      toast.error('Failed to share port')
     }
   }
 
@@ -255,10 +239,10 @@ function App() {
     }
     try {
       await api.deleteRepo(repo.id)
-      addToast(`Deleted ${repo.name}`)
+      toast.success(`Deleted ${repo.name}`)
       fetchData()
     } catch (err) {
-      addToast('Failed to delete repository', 'error')
+      toast.error('Failed to delete repository')
     }
   }
 
@@ -267,21 +251,21 @@ function App() {
       const result = await api.pullRepo(repo.id)
       if (result.success) {
         if (result.message === 'Already up to date') {
-          addToast(`${repo.name}: Already up to date`)
+          toast.success(`${repo.name}: Already up to date`)
         } else {
-          addToast(`${repo.name}: ${result.files_changed} files changed (+${result.insertions}/-${result.deletions})`)
+          toast.success(`${repo.name}: ${result.files_changed} files changed (+${result.insertions}/-${result.deletions})`)
         }
       } else {
-        addToast(`${repo.name}: ${result.message}`, 'error')
+        toast.error(`${repo.name}: ${result.message}`)
       }
       fetchData()
     } catch (err) {
-      addToast(`Failed to pull ${repo.name}`, 'error')
+      toast.error(`Failed to pull ${repo.name}`)
     }
   }
 
   const handlePullAll = async () => {
-    addToast('Pulling all repositories...', 'info')
+    toast('Pulling all repositories...')
     let updated = 0
     let upToDate = 0
     let failed = 0
@@ -302,9 +286,9 @@ function App() {
       }
     }
     if (failed > 0) {
-      addToast(`Pull complete: ${updated} updated, ${upToDate} up to date, ${failed} failed`, 'error')
+      toast.error(`Pull complete: ${updated} updated, ${upToDate} up to date, ${failed} failed`)
     } else {
-      addToast(`Pull complete: ${updated} updated, ${upToDate} already up to date`)
+      toast.success(`Pull complete: ${updated} updated, ${upToDate} already up to date`)
     }
     fetchData()
   }
@@ -312,56 +296,56 @@ function App() {
   const handleUpdateStartCommand = async (repo: Repo, command: string) => {
     try {
       await api.updateRepo(repo.id, { start_command: command })
-      addToast(`Start command updated for ${repo.name}`)
+      toast.success(`Start command updated for ${repo.name}`)
       fetchData()
     } catch (err) {
-      addToast('Failed to update start command', 'error')
+      toast.error('Failed to update start command')
     }
   }
 
   const handleExecCommand = async (repo: Repo, command: 'install' | 'fetch' | 'reset') => {
     const commandNames = { install: 'Installing dependencies', fetch: 'Fetching updates', reset: 'Resetting changes' }
-    addToast(`${commandNames[command]}...`, 'info')
+    toast(`${commandNames[command]}...`)
     try {
       const result = await api.execCommand(repo.id, command)
       if (result.success) {
-        addToast(`${repo.name}: ${command} completed`)
+        toast.success(`${repo.name}: ${command} completed`)
       } else {
-        addToast(`${repo.name}: ${command} failed`, 'error')
+        toast.error(`${repo.name}: ${command} failed`)
       }
       fetchData()
     } catch (err) {
-      addToast(`Failed to run ${command}`, 'error')
+      toast.error(`Failed to run ${command}`)
     }
   }
 
   const handleCheckoutBranch = async (repo: Repo, branch: string) => {
     try {
       await api.checkoutBranch(repo.id, branch)
-      addToast(`Switched to ${branch}`)
+      toast.success(`Switched to ${branch}`)
       fetchData()
     } catch (err) {
-      addToast(`Failed to checkout ${branch}`, 'error')
+      toast.error(`Failed to checkout ${branch}`)
     }
   }
 
   const handleStartProcess = async (repo: Repo) => {
     try {
       await api.startProcess(repo.id)
-      addToast(`Started ${repo.name}`)
+      toast.success(`Started ${repo.name}`)
       fetchData()
     } catch (err) {
-      addToast(`Failed to start: ${err}`, 'error')
+      toast.error(`Failed to start: ${err}`)
     }
   }
 
   const handleStopProcess = async (repo: Repo) => {
     try {
       await api.stopProcess(repo.id)
-      addToast(`Stopped ${repo.name}`)
+      toast.success(`Stopped ${repo.name}`)
       fetchData()
     } catch (err) {
-      addToast(`Failed to stop`, 'error')
+      toast.error('Failed to stop')
     }
   }
 
@@ -369,23 +353,23 @@ function App() {
     try {
       const result = await api.gitCommit(repo.id, message)
       if (result.success) {
-        addToast(`Committed: ${result.commit_hash}`)
+        toast.success(`Committed: ${result.commit_hash}`)
       } else {
-        addToast(result.message, 'info')
+        toast(result.message)
       }
       fetchData()
     } catch (err) {
-      addToast('Commit failed', 'error')
+      toast.error('Commit failed')
     }
   }
 
   const handleGitPush = async (repo: Repo) => {
     try {
       const result = await api.gitPush(repo.id)
-      addToast(result.message)
+      toast.success(result.message)
       fetchData()
     } catch (err) {
-      addToast('Push failed', 'error')
+      toast.error('Push failed')
     }
   }
 
@@ -452,25 +436,7 @@ function App() {
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
       <div className={`min-h-screen transition-colors duration-200 ${theme === 'dark' ? 'dark bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
         {/* Toast notifications */}
-        <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
-          {toasts.map(toast => (
-            <div
-              key={toast.id}
-              className={`
-                flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium
-                animate-in slide-in-from-right duration-200
-                ${toast.type === 'success' ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : ''}
-                ${toast.type === 'error' ? 'bg-red-600 text-white' : ''}
-                ${toast.type === 'info' ? 'bg-blue-600 text-white' : ''}
-              `}
-            >
-              {toast.type === 'success' && <Check className="h-4 w-4" />}
-              {toast.type === 'error' && <X className="h-4 w-4" />}
-              {toast.type === 'info' && <Activity className="h-4 w-4" />}
-              {toast.message}
-            </div>
-          ))}
-        </div>
+        <Toaster position="top-right" />
 
         {/* Update notification banner */}
         {updateInfo?.update_available && !dismissedUpdate && (
@@ -681,7 +647,6 @@ function App() {
                     onCommit={() => setShowCommitModal(repo)}
                     onPush={() => handleGitPush(repo)}
                     onToggleFavorite={() => toggleFavorite(repo.id)}
-                    addToast={addToast}
                   />
                 ))}
               </div>
@@ -724,10 +689,9 @@ function App() {
             onClone={async (repo) => {
               await api.cloneRepo(repo)
               setShowCloneModal(false)
-              addToast(`Cloned ${repo}`)
+              toast.success(`Cloned ${repo}`)
               fetchData()
             }}
-            addToast={addToast}
           />
         )}
 
@@ -761,7 +725,6 @@ function App() {
             status={status}
             onClose={() => setShowSettingsModal(false)}
             onToggleTheme={toggleTheme}
-            addToast={addToast}
           />
         )}
 
@@ -771,10 +734,9 @@ function App() {
             onClose={() => setShowNewRepoModal(false)}
             onCreate={async (name) => {
               await api.initRepo(name)
-              addToast(`Created ${name}`)
+              toast.success(`Created ${name}`)
               fetchData()
             }}
-            addToast={addToast}
           />
         )}
 
@@ -1034,7 +996,6 @@ function RepoCard({
   onCommit: () => void
   onPush: () => void
   onToggleFavorite: () => void
-  addToast?: (msg: string, type?: 'success' | 'error' | 'info') => void
 }) {
   const [showMenu, setShowMenu] = useState(false)
   const [showBranchMenu, setShowBranchMenu] = useState(false)
@@ -1309,6 +1270,7 @@ function RepoCard({
                 onCopyCurl={() => onCopyCurl(port.port)}
                 onOpen={() => onOpenPort(port.port)}
                 onShare={onShare}
+                onStop={onStopProcess}
               />
             ))}
           </div>
@@ -1318,9 +1280,9 @@ function RepoCard({
               {repo.start_command ? 'No dev servers running' : 'No start command configured'}
             </p>
             {repo.start_command ? (
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => window.open(`/code/?folder=${toCodeServerPath(repo.path)}`, '_blank')}>
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onStartProcess}>
                 <Play className="h-3 w-3 mr-1" />
-                Open Terminal
+                Start Server
               </Button>
             ) : (
               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onConfigureStart}>
@@ -1343,6 +1305,7 @@ function PortRow({
   onCopyCurl,
   onOpen,
   onShare,
+  onStop,
 }: {
   port: Port
   isHealthy?: boolean
@@ -1351,6 +1314,7 @@ function PortRow({
   onCopyCurl: () => void
   onOpen: () => void
   onShare: (port: number, mode: string, password?: string, expiresIn?: string) => void
+  onStop: () => void
 }) {
   const [showShareMenu, setShowShareMenu] = useState(false)
   const [showCopyMenu, setShowCopyMenu] = useState(false)
@@ -1392,7 +1356,10 @@ function PortRow({
           className={`text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[200px] ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
           title={port.command || port.process_name || 'Unknown'}
         >
-          {port.command ? port.command.split('/').pop()?.split(' ')[0] : port.process_name || 'Unknown'}
+          {(() => {
+            const raw = port.command ? port.command.split('/').pop()?.split(' ')[0] : port.process_name
+            return raw?.replace(/\s*\(v[\d.]+\)/g, '').replace(/\(v\d+\)$/, '') || 'Unknown'
+          })()}
         </span>
         <div className={`hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${modeColors[port.share_mode]}`}>
           <ShareIcon className="h-3 w-3" />
@@ -1409,7 +1376,7 @@ function PortRow({
           seen {formatRelativeTime(port.last_seen)} ago
         </span>
       </div>
-      <div className="flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-0.5 sm:gap-1">
         {/* Copy menu */}
         <div className="relative" ref={copyMenuRef}>
           <Button variant="ghost" size="sm" onClick={() => setShowCopyMenu(!showCopyMenu)} className="h-7 w-7 sm:h-8 sm:w-8 p-0">
@@ -1456,6 +1423,9 @@ function PortRow({
             />
           )}
         </div>
+        <Button variant="ghost" size="sm" onClick={onStop} className={`h-7 w-7 sm:h-8 sm:w-8 p-0 ${theme === 'dark' ? 'text-red-400 hover:text-red-300 hover:bg-red-900/20' : 'text-red-600 hover:text-red-700 hover:bg-red-50'}`}>
+          <Square className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        </Button>
       </div>
     </div>
   )
@@ -1570,12 +1540,10 @@ function CloneModal({
   theme,
   onClose,
   onClone,
-  addToast
 }: {
   theme: Theme
   onClose: () => void
   onClone: (repo: string) => Promise<void>
-  addToast: (msg: string, type?: 'success' | 'error' | 'info') => void
 }) {
   const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([])
   const [filteredRepos, setFilteredRepos] = useState<GitHubRepo[]>([])
@@ -1628,7 +1596,7 @@ function CloneModal({
     try {
       await onClone(repo)
     } catch (err) {
-      addToast('Failed to clone repository', 'error')
+      toast.error('Failed to clone repository')
     } finally {
       setCloning(null)
     }
@@ -1903,13 +1871,11 @@ function SettingsModal({
   status,
   onClose,
   onToggleTheme,
-  addToast
 }: {
   theme: Theme
   status: Status | null
   onClose: () => void
   onToggleTheme: () => void
-  addToast: (message: string, type?: 'success' | 'error' | 'info') => void
 }) {
   const [githubStatus, setGithubStatus] = useState<{
     authenticated: boolean
@@ -1945,7 +1911,7 @@ function SettingsModal({
     setChangingPassword(true)
     try {
       const result = await api.changePassword(currentPassword, newPassword)
-      addToast(result.message, 'success')
+      toast.success(result.message)
       setShowPasswordChange(false)
       setCurrentPassword('')
       setNewPassword('')
@@ -2155,12 +2121,10 @@ function NewRepoModal({
   theme,
   onClose,
   onCreate,
-  addToast
 }: {
   theme: Theme
   onClose: () => void
   onCreate: (name: string) => Promise<void>
-  addToast: (msg: string, type?: 'success' | 'error' | 'info') => void
 }) {
   const [name, setName] = useState('')
   const [creating, setCreating] = useState(false)
@@ -2179,7 +2143,7 @@ function NewRepoModal({
       await onCreate(name.trim())
       onClose()
     } catch (err) {
-      addToast('Failed to create repository', 'error')
+      toast.error('Failed to create repository')
     } finally {
       setCreating(false)
     }
