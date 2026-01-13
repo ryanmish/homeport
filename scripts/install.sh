@@ -294,7 +294,7 @@ fi
 if [ -z "$GO_CMD" ]; then
     # Install Go if not present
     echo "Installing Go..."
-    GO_VERSION="1.22.0"
+    GO_VERSION="1.21.13"
     ARCH=$(dpkg --print-architecture)
     if ! curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" -o /tmp/go.tar.gz; then
         echo -e "${RED}Failed to download Go${NC}"
