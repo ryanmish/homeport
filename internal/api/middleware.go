@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/gethomeport/homeport/internal/auth"
 	"github.com/gethomeport/homeport/internal/share"
 	"github.com/gethomeport/homeport/internal/store"
 )
@@ -49,16 +50,17 @@ func (s *Server) portAuthMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 
 		case "private":
-			// Check for Cloudflare Access header
-			cfEmail := r.Header.Get("CF-Access-Authenticated-User-Email")
-			if cfEmail == "" && !s.cfg.DevMode {
-				http.Error(w, "Unauthorized - Cloudflare Access required", http.StatusUnauthorized)
+			// Check for valid homeport session cookie (same as main app auth)
+			cookie, err := r.Cookie(auth.SessionCookieName)
+			if err == nil && s.auth.ValidateSession(cookie.Value) {
+				next.ServeHTTP(w, r)
 				return
 			}
-			next.ServeHTTP(w, r)
+			// Not authenticated - redirect to login
+			http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusFound)
 
 		case "password":
-			// Check for valid auth cookie
+			// Check for valid port-specific auth cookie
 			if share.ValidateAuthCookie(r, port) {
 				next.ServeHTTP(w, r)
 				return
@@ -68,8 +70,13 @@ func (s *Server) portAuthMiddleware(next http.Handler) http.Handler {
 			s.handlePasswordAuth(w, r, port, portInfo)
 
 		default:
-			// Unknown mode, treat as private
-			next.ServeHTTP(w, r)
+			// Unknown mode, treat as private and check session
+			cookie, err := r.Cookie(auth.SessionCookieName)
+			if err == nil && s.auth.ValidateSession(cookie.Value) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusFound)
 		}
 	})
 }
