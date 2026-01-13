@@ -1053,7 +1053,7 @@ function RepoCard({
 
   return (
     <Card className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'border-gray-200'}`}>
-      <CardHeader className={`py-4 border-b ${theme === 'dark' ? 'bg-gray-800/50 border-gray-800' : 'bg-gray-50 border-gray-100'}`}>
+      <CardHeader className={`py-4 border-b rounded-t-xl ${theme === 'dark' ? 'bg-gray-800/30 border-gray-800' : 'bg-gray-50/60 border-gray-100'}`}>
         <div className="flex items-start justify-between gap-4">
           {/* Left side: repo info */}
           <div className="flex items-start gap-3 min-w-0 flex-1">
