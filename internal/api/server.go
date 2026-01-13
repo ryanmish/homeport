@@ -440,6 +440,13 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
 
         .start-server-btn {
             display: flex;
+            padding: 10px 16px;
+            font-size: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .start-server-btn:hover {
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
 
         .server-running-controls {
@@ -453,6 +460,11 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         }
 
         .start-server-btn.hidden {
+            display: none;
+        }
+
+        .server-controls:has(.start-server-btn:not(.hidden)) .server-running-controls,
+        .server-controls:has(.server-running-controls:not(.active)) {
             display: none;
         }
 
