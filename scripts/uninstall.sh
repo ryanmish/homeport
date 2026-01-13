@@ -50,10 +50,28 @@ sudo rm -f /etc/systemd/system/homeport.service
 sudo systemctl daemon-reload
 echo -e "${GREEN}[*]${NC} Reactor offline"
 
-# Stop cloudflared (but don't uninstall - user may want it)
+# Stop and fully uninstall cloudflared service
 echo "Closing tunnel..."
 sudo systemctl stop cloudflared 2>/dev/null || true
-echo -e "${GREEN}[*]${NC} Tunnel sealed"
+sudo cloudflared service uninstall 2>/dev/null || true
+echo -e "${GREEN}[*]${NC} Tunnel service removed"
+
+# Ask about cloudflared config cleanup
+echo ""
+read -p "Delete Cloudflare tunnel config (~/.cloudflared)? (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Get tunnel name before deleting config
+    TUNNEL_NAME=$(cloudflared tunnel list --output json 2>/dev/null | jq -r '.[0].name // empty')
+    if [ -n "$TUNNEL_NAME" ]; then
+        echo "Deleting tunnel from Cloudflare..."
+        cloudflared tunnel delete "$TUNNEL_NAME" 2>/dev/null || true
+    fi
+    rm -rf ~/.cloudflared
+    echo -e "${GREEN}[*]${NC} Tunnel config deleted"
+else
+    echo -e "${YELLOW}[!]${NC} Tunnel config preserved"
+fi
 
 # Stop Docker containers
 if [ -d "$HOMEPORT_DIR/docker" ]; then

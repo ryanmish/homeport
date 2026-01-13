@@ -172,21 +172,43 @@ echo ""
 echo -e "${BLUE}[T-2] Plotting course: Tunnel Configuration${NC}"
 echo "============================================="
 
-# Check if tunnel already exists
-if [ -f "$HOME/.cloudflared/cert.pem" ]; then
-    echo -e "${GREEN}[*]${NC} Cloudflare already authenticated"
+# Clean up any existing broken cloudflared service first
+sudo systemctl stop cloudflared 2>/dev/null || true
+sudo cloudflared service uninstall 2>/dev/null || true
 
-    # Check for existing tunnels using JSON output for reliable parsing
-    EXISTING_TUNNEL=$(cloudflared tunnel list --output json 2>/dev/null | jq -r '.[0].name // empty')
-    if [ -n "$EXISTING_TUNNEL" ]; then
-        echo -e "${GREEN}[*]${NC} Found existing tunnel: $EXISTING_TUNNEL"
-        read -p "Use existing tunnel? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            TUNNEL_NAME=$EXISTING_TUNNEL
+# Check if we have valid Cloudflare auth
+NEED_AUTH=true
+if [ -f "$HOME/.cloudflared/cert.pem" ]; then
+    # Test if auth is actually valid by trying to list tunnels
+    if cloudflared tunnel list --output json &>/dev/null; then
+        echo -e "${GREEN}[*]${NC} Cloudflare already authenticated"
+        NEED_AUTH=false
+
+        # Check for existing tunnels
+        EXISTING_TUNNEL=$(cloudflared tunnel list --output json 2>/dev/null | jq -r '.[0].name // empty')
+        if [ -n "$EXISTING_TUNNEL" ]; then
+            # Check if tunnel credentials file exists
+            EXISTING_ID=$(cloudflared tunnel list --output json | jq -r '.[0].id // empty')
+            if [ -f "$HOME/.cloudflared/${EXISTING_ID}.json" ]; then
+                echo -e "${GREEN}[*]${NC} Found existing tunnel: $EXISTING_TUNNEL"
+                read -p "Use existing tunnel? (y/n) " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    TUNNEL_NAME=$EXISTING_TUNNEL
+                fi
+            else
+                echo -e "${YELLOW}[!]${NC} Found tunnel '$EXISTING_TUNNEL' but credentials missing"
+                echo "Deleting orphaned tunnel..."
+                cloudflared tunnel delete "$EXISTING_TUNNEL" 2>/dev/null || true
+            fi
         fi
+    else
+        echo -e "${YELLOW}[!]${NC} Cloudflare auth expired or invalid, re-authenticating..."
+        rm -rf "$HOME/.cloudflared"
     fi
-else
+fi
+
+if [ "$NEED_AUTH" = true ]; then
     echo ""
     echo "You need to authenticate with Cloudflare."
     echo "A URL will be displayed - open it in your browser to log in."
@@ -200,11 +222,20 @@ if [ -z "$TUNNEL_NAME" ]; then
     echo ""
     TUNNEL_NAME="homeport-$(hostname)"
     echo "Creating tunnel: $TUNNEL_NAME"
-    cloudflared tunnel create "$TUNNEL_NAME" 2>/dev/null || true
+
+    # Delete any existing tunnel with same name first (in case of partial cleanup)
+    cloudflared tunnel delete "$TUNNEL_NAME" 2>/dev/null || true
+
+    cloudflared tunnel create "$TUNNEL_NAME"
 fi
 
 # Get tunnel ID using JSON for reliable parsing
 TUNNEL_ID=$(cloudflared tunnel list --output json | jq -r ".[] | select(.name==\"$TUNNEL_NAME\") | .id")
+
+if [ -z "$TUNNEL_ID" ]; then
+    echo -e "${RED}Failed to get tunnel ID. Please check Cloudflare configuration.${NC}"
+    exit 1
+fi
 echo -e "${GREEN}[*]${NC} Tunnel ID: $TUNNEL_ID"
 
 # Get domain
