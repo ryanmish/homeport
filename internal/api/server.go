@@ -646,10 +646,18 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             height: 16px;
         }
 
+        .share-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 12px;
+        }
+
         .share-actions {
             display: flex;
+            justify-content: flex-end;
             gap: 8px;
-            padding-top: 8px;
+            padding-top: 12px;
             border-top: 1px solid #f3f4f6;
         }
 
@@ -1218,6 +1226,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         function renderShareDropdown(port, currentMode) {
             return ` + "`" + `
                 <div class="share-dropdown-content" onclick="event.stopPropagation()">
+                    <div class="share-title">Share Settings</div>
                     <div class="share-options">
                         <div class="share-option ${selectedMode === 'private' ? 'active' : ''}" onclick="event.stopPropagation(); selectShareMode('private', ${port})">
                             <div class="share-option-title">Private</div>
@@ -1245,6 +1254,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                     ` + "`" + ` : ''}
                     <div class="share-actions">
                         <button class="share-action-btn cancel" onclick="event.stopPropagation(); shareDropdown.remove(); shareDropdown = null; document.removeEventListener('click', closeShareDropdown);">Cancel</button>
+                        <button class="share-action-btn copy" onclick="event.stopPropagation(); applyShareMode(${port}, true)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply & Copy URL</button>
                         <button class="share-action-btn apply" onclick="event.stopPropagation(); applyShareMode(${port}, false)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply</button>
                     </div>
                 </div>

@@ -1560,41 +1560,47 @@ function ShareMenu({
 }) {
   const [mode, setMode] = useState(port.share_mode)
   const [password, setPassword] = useState('')
-  const [expiresIn, setExpiresIn] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
   const isValid = mode !== 'password' || password.length > 0
 
   const handleApply = (shouldCopy: boolean) => {
-    onShare(mode, mode === 'password' ? password : undefined, expiresIn || undefined)
+    onShare(mode, mode === 'password' ? password : undefined, undefined)
     if (shouldCopy) {
       onCopyUrl()
     }
   }
 
+  const modeOptions = [
+    { value: 'private', title: 'Private', desc: 'Only accessible when logged into Homeport' },
+    { value: 'password', title: 'Password', desc: 'Anyone with the password can access' },
+    { value: 'public', title: 'Public', desc: 'Anyone with the link can access' },
+  ] as const
+
   return (
-    <div className={`absolute right-0 top-full mt-1 w-72 rounded-xl shadow-lg border p-4 z-50 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-      <div className="space-y-3">
-        <div>
-          <label className={`text-xs font-medium mb-2 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Sharing Mode</label>
-          <div className="flex gap-1">
-            {(['private', 'password', 'public'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`
-                  flex-1 px-3 py-2 text-xs font-medium rounded-lg capitalize transition-colors
-                  ${mode === m
-                    ? theme === 'dark' ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'
-                    : theme === 'dark' ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
-                `}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
+    <div className={`absolute right-0 top-full mt-1 w-80 rounded-xl shadow-lg border p-4 z-50 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+      <div className="space-y-4">
+        <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Share Settings</div>
+
+        {/* Mode options - vertical cards */}
+        <div className="space-y-2">
+          {modeOptions.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setMode(opt.value)}
+              className={`w-full p-3 rounded-lg border text-left transition-colors ${
+                mode === opt.value
+                  ? theme === 'dark' ? 'border-blue-500 bg-blue-500/10' : 'border-blue-500 bg-blue-50'
+                  : theme === 'dark' ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>{opt.title}</div>
+              <div className={`text-xs mt-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{opt.desc}</div>
+            </button>
+          ))}
         </div>
 
+        {/* Password field */}
         {mode === 'password' && (
           <div>
             <label className={`text-xs font-medium mb-2 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Password</label>
@@ -1617,24 +1623,8 @@ function ShareMenu({
           </div>
         )}
 
-        {mode !== 'private' && (
-          <div>
-            <label className={`text-xs font-medium mb-2 block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Expires</label>
-            <select
-              value={expiresIn}
-              onChange={(e) => setExpiresIn(e.target.value)}
-              className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-900 border-gray-600 text-gray-100 focus:ring-gray-500' : 'border-gray-200 focus:ring-gray-400 bg-white'}`}
-            >
-              <option value="">Never</option>
-              <option value="1h">1 hour</option>
-              <option value="24h">24 hours</option>
-              <option value="7d">7 days</option>
-              <option value="30d">30 days</option>
-            </select>
-          </div>
-        )}
-
-        <div className={`flex gap-2 pt-2 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-100'}`}>
+        {/* Buttons */}
+        <div className={`flex justify-end gap-2 pt-3 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-100'}`}>
           <Button variant="outline" size="sm" onClick={onClose} className="text-xs">
             Cancel
           </Button>
@@ -1643,7 +1633,7 @@ function ShareMenu({
             size="sm"
             onClick={() => handleApply(true)}
             disabled={!isValid}
-            className="flex-1 text-xs"
+            className="text-xs"
           >
             Apply & Copy URL
           </Button>
