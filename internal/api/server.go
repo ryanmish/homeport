@@ -295,6 +295,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VS Code - Homeport</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%%3E%%3Crect width='32' height='32' rx='6' fill='%%23111827'/%%3E%%3Ccircle cx='16' cy='16' r='4' fill='white'/%%3E%%3Cpath d='M16 6v6M16 20v6M6 16h6M20 16h6' stroke='white' stroke-width='2' stroke-linecap='round'/%%3E%%3Ccircle cx='16' cy='6' r='1.5' fill='white' opacity='0.6'/%%3E%%3Ccircle cx='16' cy='26' r='1.5' fill='white' opacity='0.6'/%%3E%%3Ccircle cx='6' cy='16' r='1.5' fill='white' opacity='0.6'/%%3E%%3Ccircle cx='26' cy='16' r='1.5' fill='white' opacity='0.6'/%%3E%%3C/svg%%3E">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
