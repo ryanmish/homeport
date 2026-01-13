@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && npm run build:vscode",
+    "build:main": "tsc -b && vite build",
+    "build:vscode": "VSCODE_BUILD=true vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },

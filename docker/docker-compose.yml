@@ -48,6 +48,7 @@ services:
       - repos:/home/coder/repos
       - code-server-data:/home/coder/.local/share/code-server
       - code-server-config:/home/coder/.config/code-server
+      - claude-config:/home/coder/.claude
       - ./code-server-settings.json:/home/coder/.local/share/code-server/User/settings.json:ro
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD:-}
@@ -82,5 +83,6 @@ volumes:
   repos:
   code-server-data:
   code-server-config:
+  claude-config:
   caddy-data:
   caddy-config:

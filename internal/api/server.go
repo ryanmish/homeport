@@ -296,6 +296,8 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VS Code - Homeport</title>
     <link rel="icon" type="image/webp" href="/favicon.webp">
+    <link rel="stylesheet" href="/vscode/vscode-share.css">
+    <script src="/vscode/vscode-share.js" defer></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -893,15 +895,18 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                             <line x1="10" y1="14" x2="21" y2="3"/>
                         </svg>
                     </button>
-                    <button class="header-btn" id="shareBtn" onclick="showShareModal(activePort.port, activePort.share_mode)" title="Share settings">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="18" cy="5" r="3"/>
-                            <circle cx="6" cy="12" r="3"/>
-                            <circle cx="18" cy="19" r="3"/>
-                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-                        </svg>
-                    </button>
+                    <div style="position: relative;">
+                        <button class="header-btn" id="shareBtn" onclick="showShareModal()" title="Share settings">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="18" cy="5" r="3"/>
+                                <circle cx="6" cy="12" r="3"/>
+                                <circle cx="18" cy="19" r="3"/>
+                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                            </svg>
+                        </button>
+                        <div id="shareMenuContainer"></div>
+                    </div>
                     <button class="header-btn danger" id="stopBtn" onclick="stopServer()" title="Stop server">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -1181,144 +1186,70 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             }
         }
 
-        let shareDropdown = null;
-        let selectedMode = null;
-        let sharePassword = '';
-        let showPassword = false;
+        let shareMenuOpen = false;
 
-        function showShareModal(port, currentMode) {
-            if (shareDropdown) shareDropdown.remove();
-            selectedMode = currentMode;
-            // Retrieve saved password for this port if it exists
-            sharePassword = localStorage.getItem('homeport_share_pw_' + port) || '';
-            showPassword = false;
+        function showShareModal() {
+            if (!activePort) return;
 
-            const dropdown = document.createElement('div');
-            dropdown.className = 'share-dropdown';
-            dropdown.innerHTML = renderShareDropdown(port, currentMode);
-
-            // Position next to share button
-            const shareBtn = document.getElementById('shareBtn');
-            const rect = shareBtn.getBoundingClientRect();
-            dropdown.style.position = 'fixed';
-            dropdown.style.top = (rect.bottom + 8) + 'px';
-            dropdown.style.right = (window.innerWidth - rect.right) + 'px';
-
-            document.body.appendChild(dropdown);
-            shareDropdown = dropdown;
-
-            // Close on outside click
-            setTimeout(() => {
-                document.addEventListener('click', closeShareDropdown);
-            }, 0);
-        }
-
-        function closeShareDropdown(e) {
-            if (shareDropdown && !shareDropdown.contains(e.target) && !e.target.closest('#shareBtn')) {
-                shareDropdown.remove();
-                shareDropdown = null;
-                document.removeEventListener('click', closeShareDropdown);
-            }
-        }
-
-        function renderShareDropdown(port, currentMode) {
-            return ` + "`" + `
-                <div class="share-dropdown-content" onclick="event.stopPropagation()">
-                    <div class="share-title">Share Settings</div>
-                    <div class="share-options">
-                        <div class="share-option ${selectedMode === 'private' ? 'active' : ''}" onclick="event.stopPropagation(); selectShareMode('private', ${port})">
-                            <div class="share-option-title">Private</div>
-                            <div class="share-option-desc">Only accessible when logged into Homeport</div>
-                        </div>
-                        <div class="share-option ${selectedMode === 'password' ? 'active' : ''}" onclick="event.stopPropagation(); selectShareMode('password', ${port})">
-                            <div class="share-option-title">Password</div>
-                            <div class="share-option-desc">Anyone with the password can access</div>
-                        </div>
-                        ${selectedMode === 'password' ? ` + "`" + `
-                            <div class="share-password-field" style="margin: -4px 0 8px 0;">
-                                <div class="password-input-wrapper">
-                                    <input type="${showPassword ? 'text' : 'password'}" id="sharePasswordInput" value="${sharePassword}" placeholder="Enter password..." oninput="event.stopPropagation(); sharePassword = this.value" onclick="event.stopPropagation()" />
-                                    <button class="password-toggle" onclick="event.stopPropagation(); togglePasswordVisibility(${port})">
-                                        ${showPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'}
-                                    </button>
-                                </div>
-                            </div>
-                        ` + "`" + ` : ''}
-                        <div class="share-option ${selectedMode === 'public' ? 'active' : ''}" onclick="event.stopPropagation(); selectShareMode('public', ${port})">
-                            <div class="share-option-title">Public</div>
-                            <div class="share-option-desc">Anyone with the link can access</div>
-                        </div>
-                    </div>
-                    <div class="share-actions">
-                        <button class="share-action-btn cancel" onclick="event.stopPropagation(); shareDropdown.remove(); shareDropdown = null; document.removeEventListener('click', closeShareDropdown);">Cancel</button>
-                        <button class="share-action-btn copy" onclick="event.stopPropagation(); applyShareMode(${port}, true)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply & Copy URL</button>
-                        <button class="share-action-btn apply" onclick="event.stopPropagation(); applyShareMode(${port}, false)" ${selectedMode === 'password' && !sharePassword ? 'disabled' : ''}>Apply</button>
-                    </div>
-                </div>
-            ` + "`" + `;
-        }
-
-        function togglePasswordVisibility(port) {
-            showPassword = !showPassword;
-            if (shareDropdown) {
-                shareDropdown.innerHTML = renderShareDropdown(port, selectedMode);
-                const input = document.getElementById('sharePasswordInput');
-                if (input) {
-                    input.value = sharePassword;
-                    input.focus();
-                }
-            }
-        }
-
-        function selectShareMode(mode, port) {
-            selectedMode = mode;
-            if (shareDropdown) {
-                shareDropdown.innerHTML = renderShareDropdown(port, mode);
-            }
-        }
-
-        async function applyShareMode(port, copyUrl) {
-            if (!selectedMode) {
-                if (shareDropdown) shareDropdown.remove();
-                shareDropdown = null;
+            if (shareMenuOpen) {
+                closeShareMenu();
                 return;
             }
 
-            try {
-                let body = { mode: selectedMode };
-                if (selectedMode === 'password') {
-                    if (!sharePassword) return;
-                    body.password = sharePassword;
-                    // Save password to localStorage so user can see it later
-                    localStorage.setItem('homeport_share_pw_' + port, sharePassword);
-                } else {
-                    // Clear saved password if switching away from password mode
-                    localStorage.removeItem('homeport_share_pw_' + port);
-                }
+            shareMenuOpen = true;
 
-                await fetch('/api/share/' + port, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-
-                if (copyUrl) {
-                    const url = EXTERNAL_URL + '/' + port + '/';
+            window.renderShareMenu(
+                'shareMenuContainer',
+                { port: activePort.port, share_mode: activePort.share_mode },
+                'light',
+                async (mode, password) => {
+                    // onShare callback
+                    try {
+                        const body = { mode };
+                        if (mode === 'password' && password) {
+                            body.password = password;
+                        }
+                        await fetch('/api/share/' + activePort.port, {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body)
+                        });
+                        closeShareMenu();
+                        // Refresh ports to show new mode
+                        checkPorts();
+                    } catch (e) {
+                        console.error('Failed to update share mode:', e);
+                    }
+                },
+                () => {
+                    // onClose callback
+                    closeShareMenu();
+                },
+                () => {
+                    // onCopyUrl callback
+                    const url = EXTERNAL_URL + '/' + activePort.port + '/';
                     navigator.clipboard.writeText(url);
                 }
+            );
 
-                if (shareDropdown) shareDropdown.remove();
-                shareDropdown = null;
-                document.removeEventListener('click', closeShareDropdown);
+            // Close on outside click
+            setTimeout(() => {
+                document.addEventListener('click', handleShareOutsideClick);
+            }, 0);
+        }
 
-                // Refresh the toast to show new mode
-                dismissedPorts.delete(port);
-                knownPorts.delete(port);
-                checkPorts();
-            } catch (e) {
-                console.error('Failed to update share mode:', e);
+        function handleShareOutsideClick(e) {
+            const container = document.getElementById('shareMenuContainer');
+            if (container && !container.contains(e.target) && !e.target.closest('#shareBtn')) {
+                closeShareMenu();
             }
+        }
+
+        function closeShareMenu() {
+            shareMenuOpen = false;
+            window.unmountShareMenu('shareMenuContainer');
+            document.removeEventListener('click', handleShareOutsideClick);
         }
 
         // Start polling

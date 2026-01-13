@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install common global packages
-RUN npm install -g pnpm yarn
+# Install common global packages and Claude Code
+RUN npm install -g pnpm yarn @anthropic-ai/claude-code
 
 USER coder
 

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef, createContext } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ShareMenu } from '@/components/ShareMenu'
 import { Button } from '@/components/ui/button'
 import { Toaster, toast } from '@/components/ui/sonner'
 import { api, type Repo, type Port, type Status, type GitHubRepo, type GitStatus, type RepoInfo, type BranchInfo, type UpdateInfo, type Process, type LogEntry, type ActivityEntry } from '@/lib/api'
@@ -45,8 +46,6 @@ import {
   GitCommit,
   History,
   Star,
-  Eye,
-  EyeOff,
   Loader2,
 } from 'lucide-react'
 
@@ -537,7 +536,7 @@ function App() {
 
         {/* Header */}
         <header className={`sticky top-0 z-40 transition-colors ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}>
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+          <div className="px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between">
             {/* Logo and brand */}
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl overflow-hidden">
@@ -1454,10 +1453,6 @@ function PortRow({
             </span>
           )}
         </div>
-        {/* Last seen */}
-        <span className={`hidden md:inline text-xs ${theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}`}>
-          seen {formatRelativeTime(port.last_seen)} ago
-        </span>
       </div>
       <div className="flex items-center gap-0.5 sm:gap-1">
         {/* Copy menu */}
@@ -1544,106 +1539,7 @@ function ExternalPortRow({ port, theme }: { port: Port; theme: Theme }) {
   )
 }
 
-function ShareMenu({
-  port,
-  theme,
-  onShare,
-  onClose,
-  onCopyUrl
-}: {
-  port: Port
-  theme: Theme
-  onShare: (mode: string, password?: string, expiresIn?: string) => void
-  onClose: () => void
-  onCopyUrl: () => void
-}) {
-  const [mode, setMode] = useState(port.share_mode)
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-
-  const isValid = mode !== 'password' || password.length > 0
-
-  const handleApply = (shouldCopy: boolean) => {
-    onShare(mode, mode === 'password' ? password : undefined, undefined)
-    if (shouldCopy) {
-      onCopyUrl()
-    }
-  }
-
-  const OptionButton = ({ value, title, desc }: { value: string; title: string; desc: string }) => (
-    <button
-      onClick={() => setMode(value as typeof mode)}
-      className={`w-full p-3 rounded-lg border text-left transition-colors ${
-        mode === value
-          ? theme === 'dark' ? 'border-blue-500 bg-blue-500/10' : 'border-blue-500 bg-blue-50'
-          : theme === 'dark' ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'
-      }`}
-    >
-      <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>{title}</div>
-      <div className={`text-xs mt-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{desc}</div>
-    </button>
-  )
-
-  return (
-    <div className={`absolute right-0 top-full mt-1 w-80 rounded-xl shadow-lg border p-4 z-50 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-      <div className="space-y-4">
-        <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Share Settings</div>
-
-        {/* Mode options with password field inline */}
-        <div className="space-y-2">
-          <OptionButton value="private" title="Private" desc="Only accessible when logged into Homeport" />
-          <OptionButton value="password" title="Password" desc="Anyone with the password can access" />
-
-          {/* Password field - directly under Password option */}
-          {mode === 'password' && (
-            <div className="relative -mt-1">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password..."
-                className={`w-full px-3 py-2 pr-10 text-sm border rounded-lg focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-900 border-gray-600 text-gray-100 focus:ring-gray-500' : 'border-gray-200 focus:ring-gray-400'}`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded ${theme === 'dark' ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          )}
-
-          <OptionButton value="public" title="Public" desc="Anyone with the link can access" />
-        </div>
-
-        {/* Buttons */}
-        <div className={`flex justify-end gap-2 pt-3 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-100'}`}>
-          <Button variant="outline" size="sm" onClick={onClose} className="text-xs">
-            Cancel
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleApply(true)}
-            disabled={!isValid}
-            className="text-xs"
-          >
-            Apply & Copy URL
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => handleApply(false)}
-            disabled={!isValid}
-            className="text-xs"
-          >
-            Apply
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
+// ShareMenu is imported from @/components/ShareMenu
 
 function CloneModal({
   theme,
