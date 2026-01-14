@@ -399,11 +399,56 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         .connection-status.connecting { background: #92400e; color: #fef3c7; }
         .connection-status.hidden { opacity: 0; pointer-events: none; }
 
+        /* Mobile toolbar */
+        .mobile-toolbar {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 44px;
+            padding: 4px 8px;
+            gap: 6px;
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+        body.dark .mobile-toolbar { background: #2d2d2d; border-top: 1px solid #3c3c3c; }
+        body.light .mobile-toolbar { background: #f3f4f6; border-top: 1px solid #e5e7eb; }
+
+        .mobile-toolbar button {
+            height: 36px;
+            min-width: 44px;
+            padding: 0 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+        }
+        body.dark .mobile-toolbar button { background: #3c3c3c; color: #e5e5e5; }
+        body.light .mobile-toolbar button { background: #ffffff; color: #374151; border: 1px solid #d1d5db; }
+        .mobile-toolbar button:active { opacity: 0.7; }
+
+        .mobile-toolbar .arrow-group {
+            display: flex;
+            gap: 2px;
+        }
+        .mobile-toolbar .arrow-group button {
+            min-width: 36px;
+            padding: 0 8px;
+        }
+
         /* Mobile touch hints */
         @media (max-width: 640px) {
             .nav-breadcrumb { display: none; }
-            .terminal-container { padding: 4px; }
-            .terminal-pane { inset: 4px; }
+            .terminal-container { padding: 4px; padding-bottom: 52px; }
+            .terminal-pane { inset: 4px; bottom: 48px; }
+            .mobile-toolbar { display: flex; }
         }
     </style>
 </head>
@@ -440,6 +485,18 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
     <div class="terminal-container" id="terminalContainer"></div>
     <div id="connectionStatus" class="connection-status connecting">Connecting...</div>
 
+    <div class="mobile-toolbar" id="mobileToolbar">
+        <button onclick="sendKey('Escape')">Esc</button>
+        <button onclick="sendKey('Tab')">Tab</button>
+        <button onclick="sendCtrlC()">⌃C</button>
+        <div class="arrow-group">
+            <button onclick="sendKey('ArrowLeft')">←</button>
+            <button onclick="sendKey('ArrowUp')">↑</button>
+            <button onclick="sendKey('ArrowDown')">↓</button>
+            <button onclick="sendKey('ArrowRight')">→</button>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
@@ -474,6 +531,33 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
                     tab.term.options.theme = theme === 'dark' ? darkTheme : lightTheme;
                 }
             });
+        }
+
+        // Mobile toolbar key handlers
+        const keyMap = {
+            'Escape': '\x1b',
+            'Tab': '\t',
+            'ArrowUp': '\x1b[A',
+            'ArrowDown': '\x1b[B',
+            'ArrowRight': '\x1b[C',
+            'ArrowLeft': '\x1b[D'
+        };
+
+        function sendKey(key) {
+            const tab = tabs.find(t => t.id === activeTabId);
+            if (tab && tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+                const seq = keyMap[key] || '';
+                if (seq) {
+                    tab.ws.send(JSON.stringify({ type: 'input', data: seq }));
+                }
+            }
+        }
+
+        function sendCtrlC() {
+            const tab = tabs.find(t => t.id === activeTabId);
+            if (tab && tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+                tab.ws.send(JSON.stringify({ type: 'input', data: '\x03' }));
+            }
         }
 
         function updateStatus(status, message) {
@@ -646,14 +730,21 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 
         // Mobile keyboard handling - resize terminal when virtual keyboard opens/closes
         if (window.visualViewport) {
-            let lastHeight = window.visualViewport.height;
+            const isMobile = window.innerWidth <= 640;
             window.visualViewport.addEventListener('resize', () => {
                 const currentHeight = window.visualViewport.height;
                 const container = document.getElementById('terminalContainer');
+                const toolbar = document.getElementById('mobileToolbar');
 
-                // Adjust container height to fit above keyboard
+                // Adjust container height to fit above keyboard and toolbar
                 const headerHeight = 100; // header + tab bar
-                container.style.height = (currentHeight - headerHeight) + 'px';
+                const toolbarHeight = isMobile ? 44 : 0;
+                container.style.height = (currentHeight - headerHeight - toolbarHeight) + 'px';
+
+                // Move toolbar above keyboard
+                if (toolbar && isMobile) {
+                    toolbar.style.bottom = (window.innerHeight - currentHeight) + 'px';
+                }
 
                 // Re-fit all terminals and scroll to cursor
                 tabs.forEach(tab => {
@@ -664,8 +755,6 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
                     // Scroll terminal to bottom (where cursor usually is)
                     tab.term.scrollToBottom();
                 });
-
-                lastHeight = currentHeight;
             });
         }
 
