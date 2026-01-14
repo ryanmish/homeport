@@ -14,8 +14,8 @@ services:
     volumes:
       - homeport-data:/srv/homeport/data
       - repos:/srv/homeport/repos
-      # Shared gh CLI config for GitHub integration (shared with code-server)
-      - gh-config:/home/homeport/.config/gh
+      # Mount host's gh CLI config for GitHub integration
+      - ${HOME}/.config/gh:/home/homeport/.config/gh
       # Claude Code config (persistent volume + instructions file)
       - claude-config-homeport:/home/homeport/.claude
       - ./CLAUDE.md:/home/homeport/.claude/CLAUDE.md:ro
@@ -64,7 +64,7 @@ services:
       - repos:/home/coder/repos
       - code-server-data:/home/coder/.local/share/code-server
       - code-server-config:/home/coder/.config/code-server
-      - gh-config:/home/coder/.config/gh
+      - ${HOME}/.config/gh:/home/coder/.config/gh
       - claude-config:/home/coder/.claude
       - ./code-server-settings.json:/home/coder/.local/share/code-server/User/settings.json:ro
       - ./CLAUDE.md:/home/coder/.claude/CLAUDE.md:ro
@@ -101,7 +101,6 @@ volumes:
   repos:
   code-server-data:
   code-server-config:
-  gh-config:
   claude-config:
   claude-config-homeport:
   caddy-data:

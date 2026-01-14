@@ -153,8 +153,8 @@ main() {
 
         if [ "$REMOVE_VOLUMES" = true ]; then
             echo "Removing volumes..."
-            docker volume rm docker_homeport-data docker_repos docker_code-server-data docker_code-server-config docker_caddy-data docker_caddy-config docker_gh-config docker_claude-config docker_claude-config-homeport >/dev/null 2>&1 || true
-            docker volume rm homeport-data repos code-server-data code-server-config caddy-data caddy-config gh-config claude-config claude-config-homeport >/dev/null 2>&1 || true
+            docker volume rm docker_homeport-data docker_repos docker_code-server-data docker_code-server-config docker_caddy-data docker_caddy-config docker_claude-config docker_claude-config-homeport >/dev/null 2>&1 || true
+            docker volume rm homeport-data repos code-server-data code-server-config caddy-data caddy-config claude-config claude-config-homeport >/dev/null 2>&1 || true
             echo -e "${GREEN}[*]${NC} Volumes removed"
         else
             echo -e "${YELLOW}[!]${NC} Volumes preserved"

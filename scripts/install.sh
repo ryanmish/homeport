@@ -71,7 +71,7 @@ EOF
 
     # Install basic dependencies
     echo "Installing git, curl, wget, jq..."
-    sudo apt-get install -y -qq git curl wget ca-certificates gnupg lsb-release jq
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git curl wget ca-certificates gnupg lsb-release jq > /dev/null 2>&1
 
     echo -e "${GREEN}[*]${NC} Cargo loaded"
     echo ""
@@ -102,8 +102,8 @@ EOF
           sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
         # Install Docker
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        sudo apt-get update -qq > /dev/null 2>&1
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null 2>&1
 
         # Add current user to docker group
         sudo usermod -aG docker $USER
@@ -121,11 +121,11 @@ EOF
         echo "Installing GitHub CLI..."
 
         # Install gh CLI
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
         sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq gh
+        sudo apt-get update -qq > /dev/null 2>&1
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gh > /dev/null 2>&1
 
         echo -e "${GREEN}[*]${NC} GitHub CLI installed"
     fi
@@ -159,8 +159,8 @@ EOF
         echo -e "${GREEN}[*]${NC} Node.js already installed (v$NODE_VERSION)"
     else
         echo "Installing Node.js..."
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y -qq nodejs
+        curl -fsSL https://deb.nodesource.com/setup_20.x 2>/dev/null | sudo -E bash - > /dev/null 2>&1
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs > /dev/null 2>&1
         echo -e "${GREEN}[*]${NC} Node.js installed"
     fi
 
@@ -169,7 +169,7 @@ EOF
         echo -e "${GREEN}[*]${NC} Claude Code already installed"
     else
         echo "Installing Claude Code..."
-        sudo npm install -g @anthropic-ai/claude-code
+        sudo npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
         echo -e "${GREEN}[*]${NC} Claude Code installed"
     fi
     echo ""
@@ -196,7 +196,7 @@ EOF
 
         # Download and install cloudflared
         curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}.deb" -o /tmp/cloudflared.deb
-        sudo dpkg -i /tmp/cloudflared.deb
+        sudo dpkg -i /tmp/cloudflared.deb > /dev/null 2>&1
         rm /tmp/cloudflared.deb
 
         echo -e "${GREEN}[*]${NC} cloudflared installed"
