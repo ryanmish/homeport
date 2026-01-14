@@ -435,7 +435,12 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         }
 
         .header-btn.danger {
+            height: 32px;
+            width: auto;
+            padding: 0 10px;
             color: #dc2626;
+            border: 1px solid #fecaca;
+            background: white;
         }
 
         .header-btn.danger:hover {
@@ -446,6 +451,11 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         .header-btn svg {
             width: 16px;
             height: 16px;
+        }
+
+        .header-btn.danger svg {
+            width: 14px;
+            height: 14px;
         }
 
         .server-running-controls {
