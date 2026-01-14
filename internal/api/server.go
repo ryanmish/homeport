@@ -296,6 +296,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VS Code - Homeport</title>
     <link rel="icon" type="image/webp" href="/favicon.webp">
+    <script>window.process = { env: { NODE_ENV: 'production' } };</script>
     <link rel="stylesheet" href="/vscode/vscode-share.css">
     <script src="/vscode/vscode-share.js" defer></script>
     <style>

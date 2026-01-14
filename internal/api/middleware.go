@@ -65,7 +65,15 @@ func (s *Server) portAuthMiddleware(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusFound)
 
 		case "password":
-			// Check for valid port-specific auth cookie
+			// If user has valid Homeport session, grant access automatically (admin bypass)
+			sessionCookie, err := r.Cookie(auth.SessionCookieName)
+			if err == nil && s.auth.ValidateSession(sessionCookie.Value) {
+				s.store.LogAccess(port, clientIP, userAgent, true)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Check for valid port-specific auth cookie (for external users with password)
 			if share.ValidateAuthCookie(r, port) {
 				s.store.LogAccess(port, clientIP, userAgent, true)
 				next.ServeHTTP(w, r)
