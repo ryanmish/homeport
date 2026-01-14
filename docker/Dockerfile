@@ -36,6 +36,7 @@ FROM alpine:3.19
 RUN apk add --no-cache \
     ca-certificates \
     git \
+    git-lfs \
     openssh-client \
     github-cli \
     nodejs \
@@ -43,6 +44,14 @@ RUN apk add --no-cache \
     bash \
     su-exec \
     icu-data-full \
+    # Build tools for native npm modules (sharp, bcrypt, sqlite3, etc.)
+    python3 \
+    make \
+    g++ \
+    # Fonts for PDF generation, canvas, etc.
+    fontconfig \
+    ttf-dejavu \
+    && git lfs install \
     && rm -rf /var/cache/apk/*
 
 # Install Claude Code globally
