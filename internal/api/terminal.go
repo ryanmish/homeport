@@ -381,6 +381,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             height: calc(100%% - 100px);
             padding: 8px;
             position: relative;
+            transition: height 0.15s ease-out;
         }
         body.dark .terminal-container { background: #1e1e1e; }
         body.light .terminal-container { background: #ffffff; }
@@ -411,6 +412,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             gap: 8px;
             z-index: 200;
             align-items: center;
+            transition: bottom 0.15s ease-out;
         }
         body.dark .mobile-toolbar { background: #1e1e1e; border-top: 1px solid #3c3c3c; }
         body.light .mobile-toolbar { background: #f9fafb; border-top: 1px solid #e5e7eb; }
