@@ -68,6 +68,12 @@ RUN mkdir -p /srv/homeport/data /srv/homeport/repos /srv/homeport/ui \
 RUN mkdir -p /home/homeport/.claude /home/homeport/.config \
     && chown -R homeport:homeport /home/homeport
 
+# Set environment variables for all processes (including docker exec shells)
+ENV HOME=/home/homeport
+ENV USER=homeport
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
 WORKDIR /srv/homeport
 
 # Copy binaries
