@@ -6,11 +6,13 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 
 	"github.com/gethomeport/homeport/internal/auth"
+	"github.com/gethomeport/homeport/internal/store"
 	"github.com/gethomeport/homeport/internal/terminal"
 	"github.com/gethomeport/homeport/internal/version"
 )
@@ -89,15 +91,18 @@ func (s *Server) handleDeleteTerminalSession(w http.ResponseWriter, r *http.Requ
 
 // handleTerminalWebSocket handles WebSocket connections for the terminal
 func (s *Server) handleTerminalWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Authenticate via session cookie
-	cookie, err := r.Cookie(auth.SessionCookieName)
-	if err != nil || !s.auth.ValidateSession(cookie.Value) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+	// Authenticate via session cookie (skip if no password configured)
+	if s.auth.IsConfigured() {
+		cookie, err := r.Cookie(auth.SessionCookieName)
+		if err != nil || !s.auth.ValidateSession(cookie.Value) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	repoID := chi.URLParam(r, "repoId")
 	sessionID := r.URL.Query().Get("session")
+	initCmd := r.URL.Query().Get("cmd") // Optional command to run on start
 
 	// Get or create session
 	var session *terminal.Session
@@ -107,15 +112,32 @@ func (s *Server) handleTerminalWebSocket(w http.ResponseWriter, r *http.Request)
 
 	// If no session or session doesn't exist, create new one
 	if session == nil {
-		repo, err := s.store.GetRepo(repoID)
-		if err != nil {
-			http.Error(w, "Repository not found", http.StatusNotFound)
-			return
+		var workDir string
+		var err error
+		if repoID == "_system" {
+			// System terminal - use repos directory
+			workDir = "/srv/homeport/repos"
+		} else {
+			// Repo terminal - use repo path
+			var repo *store.Repo
+			repo, err = s.store.GetRepo(repoID)
+			if err != nil {
+				http.Error(w, "Repository not found", http.StatusNotFound)
+				return
+			}
+			workDir = repo.Path
 		}
-		session, err = s.termMgr.CreateSession(repoID, repo.Path)
+		session, err = s.termMgr.CreateSession(repoID, workDir)
 		if err != nil {
 			http.Error(w, "Failed to create session", http.StatusInternalServerError)
 			return
+		}
+		// If there's an init command, write it to the terminal after a short delay
+		if initCmd != "" {
+			go func() {
+				time.Sleep(500 * time.Millisecond) // Wait for shell to be ready
+				session.Write([]byte(initCmd + "\n"))
+			}()
 		}
 	}
 
@@ -134,27 +156,35 @@ func (s *Server) handleTerminalWebSocket(w http.ResponseWriter, r *http.Request)
 	// Send session ID to client
 	conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"session","id":"%s"}`, session.ID)))
 
+	// Replay scrollback history
+	scrollback := session.GetScrollback()
+	if len(scrollback) > 0 {
+		if err := conn.WriteMessage(websocket.BinaryMessage, scrollback); err != nil {
+			log.Printf("Failed to send scrollback: %v", err)
+		}
+	}
+
+	// Subscribe to live output
+	outputCh := session.Subscribe()
+	defer session.Unsubscribe(outputCh)
+
 	var wg sync.WaitGroup
 	done := make(chan struct{})
 
-	// Read from PTY and write to WebSocket
+	// Read from subscription and write to WebSocket
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		buf := make([]byte, 4096)
 		for {
 			select {
 			case <-done:
 				return
-			default:
-				n, err := session.Read(buf)
-				if err != nil {
+			case data, ok := <-outputCh:
+				if !ok {
 					return
 				}
-				if n > 0 {
-					if err := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
-						return
-					}
+				if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
+					return
 				}
 			}
 		}
@@ -182,6 +212,10 @@ func (s *Server) handleTerminalWebSocket(w http.ResponseWriter, r *http.Request)
 					}
 				case "ping":
 					conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"pong"}`))
+				case "close":
+					// Client explicitly closed this session
+					s.termMgr.DeleteSession(session.ID)
+					return
 				}
 			} else {
 				session.Write(message)
@@ -196,10 +230,26 @@ func (s *Server) handleTerminalWebSocket(w http.ResponseWriter, r *http.Request)
 // handleTerminalPage serves the terminal wrapper HTML page
 func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "repoId")
-	repo, err := s.store.GetRepo(repoID)
-	if err != nil {
-		http.Error(w, "Repository not found", http.StatusNotFound)
-		return
+	initCmd := r.URL.Query().Get("cmd") // Optional command to auto-run
+
+	var repoName string
+	var vsCodeLink string
+	if repoID == "_system" {
+		repoName = "System"
+		vsCodeLink = "" // No VS Code link for system terminal
+	} else {
+		repo, err := s.store.GetRepo(repoID)
+		if err != nil {
+			http.Error(w, "Repository not found", http.StatusNotFound)
+			return
+		}
+		repoName = repo.Name
+		vsCodeLink = fmt.Sprintf(`<a href="/code/?folder=/home/coder/repos/%s" class="header-btn text">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                </svg>
+                VS Code
+            </a>`, repoName)
 	}
 
 	page := fmt.Sprintf(`<!DOCTYPE html>
@@ -368,21 +418,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             </div>
         </div>
         <div class="header-right">
-            <button class="header-btn" onclick="toggleTheme()" title="Toggle theme">
-                <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
-                    <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
-                    <line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                </svg>
-            </button>
-            <a href="/code/?folder=/home/coder/repos/%s" class="header-btn text">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-                </svg>
-                VS Code
-            </a>
+            %s
         </div>
     </header>
 
@@ -402,11 +438,11 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
     <script>
         const REPO_ID = '%s';
-        const STORAGE_KEY = 'homeport_terminal_' + REPO_ID;
+        const INIT_CMD = '%s';
 
         let tabs = [];
         let activeTabId = null;
-        let theme = localStorage.getItem('terminal_theme') || 'dark';
+        let theme = localStorage.getItem('theme') || 'light';
 
         const darkTheme = {
             background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#d4d4d4', cursorAccent: '#1e1e1e',
@@ -418,7 +454,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 
         const lightTheme = {
             background: '#ffffff', foreground: '#1e1e1e', cursor: '#1e1e1e', cursorAccent: '#ffffff',
-            selection: 'rgba(0, 0, 0, 0.2)', black: '#000000', red: '#cd3131', green: '#00bc7c',
+            selectionBackground: '#B4D7FF', black: '#000000', red: '#cd3131', green: '#00bc7c',
             yellow: '#949800', blue: '#0451a5', magenta: '#bc05bc', cyan: '#0598bc', white: '#555555',
             brightBlack: '#666666', brightRed: '#cd3131', brightGreen: '#14ce14', brightYellow: '#b5ba00',
             brightBlue: '#0451a5', brightMagenta: '#bc05bc', brightCyan: '#0598bc', brightWhite: '#1e1e1e'
@@ -431,18 +467,6 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
                     tab.term.options.theme = theme === 'dark' ? darkTheme : lightTheme;
                 }
             });
-            const icon = document.getElementById('themeIcon');
-            if (theme === 'dark') {
-                icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-            } else {
-                icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
-            }
-        }
-
-        function toggleTheme() {
-            theme = theme === 'dark' ? 'light' : 'dark';
-            localStorage.setItem('terminal_theme', theme);
-            applyTheme();
         }
 
         function updateStatus(status, message) {
@@ -453,16 +477,17 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             else el.classList.remove('hidden');
         }
 
-        function saveSessions() {
-            const sessionIds = tabs.map(t => t.sessionId).filter(Boolean);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionIds));
-        }
-
-        function loadSessions() {
+        async function loadServerSessions() {
             try {
-                const saved = localStorage.getItem(STORAGE_KEY);
-                return saved ? JSON.parse(saved) : [];
-            } catch { return []; }
+                const resp = await fetch('/api/terminal/' + REPO_ID + '/sessions');
+                if (resp.ok) {
+                    const sessions = await resp.json();
+                    return sessions.map(s => s.id);
+                }
+            } catch (e) {
+                console.error('Failed to load sessions:', e);
+            }
+            return [];
         }
 
         function renderTabs() {
@@ -498,7 +523,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             term.open(pane);
             fitAddon.fit();
 
-            const tab = { id, term, fitAddon, pane, ws: null, sessionId, reconnectAttempts: 0 };
+            const tab = { id, term, fitAddon, pane, ws: null, sessionId, reconnectAttempts: 0, closing: false };
             tabs.push(tab);
 
             term.onData(data => {
@@ -514,7 +539,11 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         }
 
         function connectTab(tab, sessionId = null) {
-            const wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/api/terminal/' + REPO_ID + (sessionId ? '?session=' + sessionId : '');
+            let wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/api/terminal/' + REPO_ID;
+            const params = [];
+            if (sessionId) params.push('session=' + sessionId);
+            if (!sessionId && INIT_CMD) params.push('cmd=' + encodeURIComponent(INIT_CMD));
+            if (params.length > 0) wsUrl += '?' + params.join('&');
             updateStatus('connecting', 'Connecting...');
 
             tab.ws = new WebSocket(wsUrl);
@@ -534,13 +563,14 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
                         const msg = JSON.parse(e.data);
                         if (msg.type === 'session' && msg.id) {
                             tab.sessionId = msg.id;
-                            saveSessions();
                         }
                     } catch { tab.term.write(e.data); }
                 }
             };
 
             tab.ws.onclose = () => {
+                // Don't reconnect if tab was intentionally closed
+                if (tab.closing) return;
                 if (tab.reconnectAttempts < 5) {
                     tab.reconnectAttempts++;
                     updateStatus('connecting', 'Reconnecting (' + tab.reconnectAttempts + '/5)...');
@@ -571,7 +601,16 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             if (idx === -1) return;
 
             const tab = tabs[idx];
-            if (tab.ws) tab.ws.close();
+            tab.closing = true; // Prevent reconnection
+
+            // Send close message to delete session on server
+            if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+                tab.ws.send(JSON.stringify({ type: 'close' }));
+                // Wait a bit for server to process before closing
+                setTimeout(() => { if (tab.ws) tab.ws.close(); }, 100);
+            } else if (tab.ws) {
+                tab.ws.close();
+            }
             tab.pane.remove();
             tabs.splice(idx, 1);
 
@@ -580,7 +619,6 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             } else if (activeTabId === id) {
                 switchTab(tabs[Math.max(0, idx - 1)].id);
             }
-            saveSessions();
             renderTabs();
         }
 
@@ -607,15 +645,22 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 
         // Initialize
         applyTheme();
-        const savedSessions = loadSessions();
-        if (savedSessions.length > 0) {
-            savedSessions.forEach(sid => createTab(sid));
-        } else {
-            createTab();
-        }
+        (async function init() {
+            // If there's an init command, start fresh (don't load saved sessions)
+            if (INIT_CMD) {
+                createTab();
+            } else {
+                const serverSessions = await loadServerSessions();
+                if (serverSessions.length > 0) {
+                    serverSessions.forEach(sid => createTab(sid));
+                } else {
+                    createTab();
+                }
+            }
+        })();
     </script>
 </body>
-</html>`, repo.Name, version.Version, repo.Name, repo.Name, repoID)
+</html>`, repoName, version.Version, repoName, vsCodeLink, repoID, initCmd)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(page))

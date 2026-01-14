@@ -137,10 +137,13 @@ func (s *Server) setupRouter() {
 
 			// Auth management endpoints
 			r.Post("/auth/change-password", s.handleChangePassword)
-		})
 
-		// Terminal WebSocket endpoint
-		r.Get("/api/terminal/{repoId}", s.handleTerminalWebSocket)
+			// Terminal session management (flat routes to avoid chi nesting issues)
+			r.Get("/terminal/{repoId}/sessions", s.handleTerminalSessions)
+			r.Post("/terminal/{repoId}/sessions", s.handleCreateTerminalSession)
+			r.Delete("/terminal/sessions/{sessionId}", s.handleDeleteTerminalSession)
+			r.Get("/terminal/{repoId}", s.handleTerminalWebSocket)
+		})
 
 		// Terminal page wrapper
 		r.Get("/terminal/{repoId}", s.handleTerminalPage)
@@ -275,7 +278,7 @@ func (s *Server) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Otherwise proxy to code-server (removes _wrapped param if present)
-	proxy.HandlerWithBase(8443, "/code").ServeHTTP(w, r)
+	proxy.HandlerWithHostAndBase(s.cfg.CodeServerHost, 8443, "/code").ServeHTTP(w, r)
 }
 
 // serveCodeServerWrapper serves an HTML page that wraps code-server with a nav header
@@ -1425,8 +1428,9 @@ func (s *Server) doScan() {
 		}
 	}
 
-	// Clean up stale ports (not seen in last 10 seconds)
-	staleThreshold := time.Now().Add(-10 * time.Second)
+	// Clean up stale ports (not seen in last 30 seconds)
+	// Using 30s instead of 10s to avoid race conditions with UI polling
+	staleThreshold := time.Now().Add(-30 * time.Second)
 	if err := s.store.CleanupStalePorts(staleThreshold); err != nil {
 		log.Printf("Failed to cleanup stale ports: %v", err)
 	}

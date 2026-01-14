@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -138,8 +139,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	// Persist to file for restart persistence
 	hashFile := filepath.Join(s.cfg.DataDir, "password_hash")
 	if err := os.WriteFile(hashFile, hash, 0600); err != nil {
-		// Log error but don't fail - the in-memory change still worked
-		// The password will be lost on restart but that's acceptable
+		log.Printf("Warning: failed to persist password hash to %s: %v (password change still active in memory)", hashFile, err)
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]string{

@@ -76,7 +76,13 @@ func Handler(port int) http.Handler {
 // HandlerWithBase creates a reverse proxy that strips a base path prefix.
 // Used for services mounted at a sub-path (e.g., /code/* -> code-server)
 func HandlerWithBase(port int, basePath string) http.Handler {
-	target, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
+	return HandlerWithHostAndBase("localhost", port, basePath)
+}
+
+// HandlerWithHostAndBase creates a reverse proxy with a custom host.
+// Used for Docker networking where services are on different containers.
+func HandlerWithHostAndBase(host string, port int, basePath string) http.Handler {
+	target, _ := url.Parse(fmt.Sprintf("http://%s:%d", host, port))
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 

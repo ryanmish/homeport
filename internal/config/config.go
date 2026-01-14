@@ -30,19 +30,23 @@ type Config struct {
 
 	// Dev mode (uses lsof instead of /proc, different paths)
 	DevMode bool `yaml:"-"`
+
+	// Code-server host (for Docker networking - defaults to localhost)
+	CodeServerHost string `yaml:"code_server_host"`
 }
 
 func Default() *Config {
 	return &Config{
-		ListenAddr:   ":8080",
-		PortRangeMin: 3000,
-		PortRangeMax: 9999,
-		ScanInterval: 5,
-		ReposDir:     "/srv/homeport/repos",
-		DataDir:      "/srv/homeport/data",
-		UIDir:        "/srv/homeport/ui",
-		ExternalURL:  "http://localhost:8080",
-		DevMode:      false,
+		ListenAddr:     ":8080",
+		PortRangeMin:   3000,
+		PortRangeMax:   9999,
+		ScanInterval:   5,
+		ReposDir:       "/srv/homeport/repos",
+		DataDir:        "/srv/homeport/data",
+		UIDir:          "/srv/homeport/ui",
+		ExternalURL:    "http://localhost:8080",
+		DevMode:        false,
+		CodeServerHost: "localhost",
 	}
 }
 

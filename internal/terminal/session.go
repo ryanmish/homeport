@@ -12,6 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	// MaxScrollback is the maximum size of the scrollback buffer (100KB)
+	MaxScrollback = 100 * 1024
+)
+
 // Session represents a terminal session with a PTY
 type Session struct {
 	ID        string    `json:"id"`
@@ -25,6 +30,14 @@ type Session struct {
 	mu      sync.Mutex
 	closed  bool
 	clients int // number of connected WebSocket clients
+
+	// Scrollback buffer for replay on reconnect
+	scrollback   []byte
+	scrollbackMu sync.RWMutex
+
+	// Subscribers for live output broadcast
+	subscribers   []chan []byte
+	subscribersMu sync.Mutex
 }
 
 // Manager manages terminal sessions
@@ -76,14 +89,19 @@ func (m *Manager) CreateSession(repoID, repoPath string) (*Session, error) {
 	pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80})
 
 	session := &Session{
-		ID:        uuid.New().String(),
-		RepoID:    repoID,
-		RepoPath:  repoPath,
-		CreatedAt: time.Now(),
-		LastUsed:  time.Now(),
-		ptmx:      ptmx,
-		cmd:       cmd,
+		ID:          uuid.New().String(),
+		RepoID:      repoID,
+		RepoPath:    repoPath,
+		CreatedAt:   time.Now(),
+		LastUsed:    time.Now(),
+		ptmx:        ptmx,
+		cmd:         cmd,
+		scrollback:  make([]byte, 0, MaxScrollback),
+		subscribers: make([]chan []byte, 0),
 	}
+
+	// Start background reader to capture output
+	go session.readLoop()
 
 	m.sessions[session.ID] = session
 
@@ -144,7 +162,77 @@ func (m *Manager) cleanupLoop() {
 	}
 }
 
-// Read reads from the PTY
+// readLoop continuously reads from PTY and broadcasts to subscribers
+func (s *Session) readLoop() {
+	buf := make([]byte, 4096)
+	for {
+		n, err := s.ptmx.Read(buf)
+		if err != nil {
+			return
+		}
+		if n > 0 {
+			data := make([]byte, n)
+			copy(data, buf[:n])
+
+			// Add to scrollback buffer
+			s.scrollbackMu.Lock()
+			s.scrollback = append(s.scrollback, data...)
+			// Trim if exceeds max size
+			if len(s.scrollback) > MaxScrollback {
+				s.scrollback = s.scrollback[len(s.scrollback)-MaxScrollback:]
+			}
+			s.scrollbackMu.Unlock()
+
+			// Broadcast to all subscribers
+			s.subscribersMu.Lock()
+			for _, ch := range s.subscribers {
+				select {
+				case ch <- data:
+				default:
+					// Skip slow subscribers
+				}
+			}
+			s.subscribersMu.Unlock()
+
+			s.mu.Lock()
+			s.LastUsed = time.Now()
+			s.mu.Unlock()
+		}
+	}
+}
+
+// Subscribe returns a channel that receives terminal output
+func (s *Session) Subscribe() chan []byte {
+	ch := make(chan []byte, 256)
+	s.subscribersMu.Lock()
+	s.subscribers = append(s.subscribers, ch)
+	s.subscribersMu.Unlock()
+	return ch
+}
+
+// Unsubscribe removes a subscriber channel
+func (s *Session) Unsubscribe(ch chan []byte) {
+	s.subscribersMu.Lock()
+	defer s.subscribersMu.Unlock()
+	for i, sub := range s.subscribers {
+		if sub == ch {
+			s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
+			close(ch)
+			return
+		}
+	}
+}
+
+// GetScrollback returns the current scrollback buffer
+func (s *Session) GetScrollback() []byte {
+	s.scrollbackMu.RLock()
+	defer s.scrollbackMu.RUnlock()
+	result := make([]byte, len(s.scrollback))
+	copy(result, s.scrollback)
+	return result
+}
+
+// Read reads from the PTY (deprecated - use Subscribe instead)
 func (s *Session) Read(p []byte) (int, error) {
 	s.mu.Lock()
 	if s.closed {

@@ -1,0 +1,56 @@
+# Local development compose - works on Mac with Colima
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Cleanup (delete everything):
+#   docker compose -f docker-compose.dev.yml down
+#   rm -rf .dev-data
+
+services:
+  homeportd:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: homeportd-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./.dev-data/homeport:/srv/homeport/data
+      - ./.dev-data/repos:/srv/homeport/repos
+      - ./.dev-data/gh-config:/home/homeport/.config/gh
+    environment:
+      - HOMEPORT_EXTERNAL_URL=http://localhost:8080
+      - HOMEPORT_COOKIE_SECRET=dev-secret-change-in-prod
+      - HOMEPORT_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-}
+      - HOMEPORT_DEV_MODE=true
+      - HOMEPORT_CODE_SERVER_HOST=code-server
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/status"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  code-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.code-server
+    container_name: code-server-dev
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./.dev-data/repos:/home/coder/repos
+      - ./.dev-data/code-server:/home/coder/.local/share/code-server
+      - ./.dev-data/code-server-config:/home/coder/.config/code-server
+      - ./.dev-data/gh-config:/home/coder/.config/gh
+      - ./code-server-settings.json:/home/coder/.local/share/code-server/User/settings.json:ro
+    environment:
+      - DOCKER_USER=coder
+    command:
+      - --bind-addr=0.0.0.0:8443
+      - --auth=none
+      - --disable-telemetry
+      - --disable-getting-started-override
+      - /home/coder/repos
+    restart: unless-stopped

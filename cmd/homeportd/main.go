@@ -59,9 +59,12 @@ func main() {
 		cfg.ListenAddr = *listenAddr
 	}
 
-	// Load auth settings from environment
+	// Load settings from environment
 	if externalURL := os.Getenv("HOMEPORT_EXTERNAL_URL"); externalURL != "" {
 		cfg.ExternalURL = externalURL
+	}
+	if codeServerHost := os.Getenv("HOMEPORT_CODE_SERVER_HOST"); codeServerHost != "" {
+		cfg.CodeServerHost = codeServerHost
 	}
 	cfg.PasswordHash = os.Getenv("HOMEPORT_PASSWORD_HASH")
 	cfg.CookieSecret = os.Getenv("HOMEPORT_COOKIE_SECRET")

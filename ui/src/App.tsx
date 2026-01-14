@@ -94,6 +94,7 @@ function App() {
     const saved = localStorage.getItem('homeport_favorites')
     return saved ? new Set(JSON.parse(saved)) : new Set()
   })
+  const [githubAuthenticated, setGithubAuthenticated] = useState<boolean | null>(null) // null = loading/optimistic
 
   const toggleTheme = useCallback(() => {
     setTheme(prev => {
@@ -110,16 +111,18 @@ function App() {
   
   const fetchData = async () => {
     try {
-      const [statusData, reposData, portsData, processesData] = await Promise.all([
+      const [statusData, reposData, portsData, processesData, githubData] = await Promise.all([
         api.getStatus(),
         api.getRepos(),
         api.getPorts(),
         api.getProcesses().catch(() => []),
+        api.getGitHubStatus().catch(() => ({ authenticated: false })),
       ])
       setStatus(statusData)
       setRepos(reposData)
       setPorts(portsData)
       setProcesses(processesData)
+      setGithubAuthenticated(githubData.authenticated)
       setError(null)
 
       // Check port health
@@ -568,6 +571,13 @@ function App() {
               {/* Icon buttons */}
               <div className={`flex items-center border-r pr-2 mr-2 ${theme === 'dark' ? 'border-gray-800' : 'border-gray-200'}`}>
                 <button
+                  onClick={() => window.open('/terminal/_system', '_blank')}
+                  className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                  title="System Terminal"
+                >
+                  <Terminal className="h-4 w-4" />
+                </button>
+                <button
                   onClick={() => setShowActivityPanel(!showActivityPanel)}
                   className={`p-2 rounded-lg transition-colors ${showActivityPanel ? theme === 'dark' ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700' : theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
                   title="Activity log"
@@ -596,7 +606,12 @@ function App() {
                   <Plus className="h-4 w-4 sm:mr-1.5" />
                   <span className="hidden sm:inline">New</span>
                 </Button>
-                <Button size="sm" onClick={() => setShowCloneModal(true)}>
+                <Button
+                  size="sm"
+                  onClick={() => setShowCloneModal(true)}
+                  disabled={githubAuthenticated === false}
+                  title={githubAuthenticated === false ? 'Connect GitHub in Settings first' : undefined}
+                >
                   <Github className="h-4 w-4 sm:mr-1.5" />
                   <span className="hidden sm:inline">Clone</span>
                 </Button>
@@ -672,7 +687,11 @@ function App() {
                       Get started by cloning an existing repository or creating a new one.
                     </p>
                     <div className="flex items-center justify-center gap-3">
-                      <Button onClick={() => setShowCloneModal(true)}>
+                      <Button
+                        onClick={() => setShowCloneModal(true)}
+                        disabled={githubAuthenticated === false}
+                        title={githubAuthenticated === false ? 'Connect GitHub in Settings first' : undefined}
+                      >
                         <Github className="h-4 w-4 mr-2" />
                         Clone Repository
                       </Button>
@@ -1241,10 +1260,16 @@ function RepoCard({
                 Terminal
               </Button>
             </a>
-            {/* Desktop: VS Code as primary */}
+            {/* Desktop: VS Code and Terminal buttons */}
             <a href={`/code/?folder=${toCodeServerPath(repo.path)}`} target="_blank" rel="noopener noreferrer" className="hidden sm:block">
               <Button variant="outline" size="sm" className="h-8">
                 Open in VS Code
+              </Button>
+            </a>
+            <a href={`/terminal/${repo.id}`} target="_blank" rel="noopener noreferrer" className="hidden sm:block">
+              <Button variant="outline" size="sm" className="h-8">
+                <Terminal className="h-4 w-4 mr-1" />
+                Terminal
               </Button>
             </a>
             <div className="relative" ref={menuRef}>
@@ -1919,6 +1944,16 @@ function SettingsModal({
       .finally(() => setLoading(false))
   }, [])
 
+  const handleConnectGitHub = () => {
+    // Open system terminal with gh auth login command
+    window.open('/terminal/_system?cmd=gh%20auth%20login%20--web', '_blank')
+  }
+
+  const handleManageGitHub = () => {
+    // Open system terminal with gh auth status command
+    window.open('/terminal/_system?cmd=gh%20auth%20status', '_blank')
+  }
+
   const handlePasswordChange = async () => {
     setPasswordError('')
 
@@ -1970,31 +2005,43 @@ function SettingsModal({
               {loading ? (
                 <div className={`mt-2 h-16 rounded-lg animate-pulse ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'}`} />
               ) : githubStatus?.authenticated && githubStatus.user ? (
-                <a
-                  href={`https://github.com/${githubStatus.user.login}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`mt-2 flex items-center gap-3 p-3 rounded-lg transition-colors ${theme === 'dark' ? 'bg-gray-800/50 hover:bg-gray-800' : 'bg-gray-50 hover:bg-gray-100'}`}
-                >
-                  <img
-                    src={githubStatus.user.avatarUrl}
-                    alt={githubStatus.user.login}
-                    className="w-10 h-10 rounded-full"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className={`font-medium truncate ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
-                      {githubStatus.user.name || githubStatus.user.login}
-                    </p>
-                    <p className={`text-sm truncate ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                      @{githubStatus.user.login}
-                    </p>
-                  </div>
-                  <ExternalLink className={`h-4 w-4 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
-                </a>
-              ) : (
-                <div className={`mt-2 p-3 rounded-lg text-sm ${theme === 'dark' ? 'bg-gray-800/50 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
-                  Not connected. Run <code className={`px-1 py-0.5 rounded ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`}>gh auth login</code> to connect.
+                <div className={`mt-2 rounded-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
+                  <a
+                    href={`https://github.com/${githubStatus.user.login}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center gap-3 p-3 transition-colors ${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
+                  >
+                    <img
+                      src={githubStatus.user.avatarUrl}
+                      alt={githubStatus.user.login}
+                      className="w-10 h-10 rounded-full"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium truncate ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
+                        {githubStatus.user.name || githubStatus.user.login}
+                      </p>
+                      <p className={`text-sm truncate ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                        @{githubStatus.user.login}
+                      </p>
+                    </div>
+                    <ExternalLink className={`h-4 w-4 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
+                  </a>
+                  <button
+                    onClick={handleManageGitHub}
+                    className={`w-full p-2 text-sm border-t transition-colors ${theme === 'dark' ? 'border-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+                  >
+                    Manage in Terminal
+                  </button>
                 </div>
+              ) : (
+                <button
+                  onClick={handleConnectGitHub}
+                  className={`mt-2 w-full flex items-center justify-center gap-2 p-3 rounded-lg text-sm transition-colors ${theme === 'dark' ? 'bg-gray-800/50 hover:bg-gray-800 text-gray-300' : 'bg-gray-50 hover:bg-gray-100 text-gray-700'}`}
+                >
+                  <Github className="h-4 w-4" />
+                  Connect GitHub
+                </button>
               )}
             </div>
 

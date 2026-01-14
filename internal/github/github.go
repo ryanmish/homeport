@@ -42,6 +42,14 @@ func (c *Client) IsAuthenticated() bool {
 	return cmd.Run() == nil
 }
 
+// Logout removes GitHub authentication
+func (c *Client) Logout() error {
+	cmd := exec.Command("gh", "auth", "logout", "--hostname", "github.com")
+	// gh auth logout prompts for confirmation, use yes to auto-confirm
+	cmd.Stdin = strings.NewReader("Y\n")
+	return cmd.Run()
+}
+
 // GetUser returns the authenticated GitHub user info
 func (c *Client) GetUser() (*User, error) {
 	cmd := exec.Command("gh", "api", "user")

@@ -212,6 +212,7 @@ export const api = {
   searchGitHubRepos: (query: string, limit = 20) =>
     fetchJSON<GitHubRepo[]>(`/github/search?q=${encodeURIComponent(query)}&limit=${limit}`),
 
+
   // New endpoints for repo info, branches, and actions
   getRepoInfo: (id: string) =>
     fetchJSON<RepoInfo>(`/repos/${id}/info`),
