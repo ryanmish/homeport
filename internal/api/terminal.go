@@ -263,7 +263,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <title>Terminal - %s</title>
     <link rel="icon" type="image/webp" href="/favicon.webp">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
@@ -643,6 +643,31 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
                 }
             });
         });
+
+        // Mobile keyboard handling - resize terminal when virtual keyboard opens/closes
+        if (window.visualViewport) {
+            let lastHeight = window.visualViewport.height;
+            window.visualViewport.addEventListener('resize', () => {
+                const currentHeight = window.visualViewport.height;
+                const container = document.getElementById('terminalContainer');
+
+                // Adjust container height to fit above keyboard
+                const headerHeight = 100; // header + tab bar
+                container.style.height = (currentHeight - headerHeight) + 'px';
+
+                // Re-fit all terminals and scroll to cursor
+                tabs.forEach(tab => {
+                    tab.fitAddon.fit();
+                    if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+                        tab.ws.send(JSON.stringify({ type: 'resize', cols: tab.term.cols, rows: tab.term.rows }));
+                    }
+                    // Scroll terminal to bottom (where cursor usually is)
+                    tab.term.scrollToBottom();
+                });
+
+                lastHeight = currentHeight;
+            });
+        }
 
         // Mobile swipe gesture for tab switching
         let touchStartX = 0;
