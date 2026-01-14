@@ -8,12 +8,16 @@ services:
     container_name: homeportd
     network_mode: host
     pid: "host"  # Required to see processes from other containers for port-repo association
+    depends_on:
+      homeportd-init:
+        condition: service_completed_successfully
     volumes:
       - homeport-data:/srv/homeport/data
       - repos:/srv/homeport/repos
       # Mount gh CLI config for GitHub integration
       - ${HOME}/.config/gh:/home/homeport/.config/gh:ro
-      # Mount CLAUDE.md for Claude Code integration
+      # Claude Code config (persistent volume + instructions file)
+      - claude-config-homeport:/home/homeport/.claude
       - ./CLAUDE.md:/home/homeport/.claude/CLAUDE.md:ro
     environment:
       - HOMEPORT_EXTERNAL_URL=${EXTERNAL_URL:-http://localhost}
@@ -26,7 +30,7 @@ services:
       timeout: 3s
       retries: 3
 
-  # Init container to fix volume permissions
+  # Init container to fix volume permissions for code-server
   code-server-init:
     image: alpine:latest
     container_name: code-server-init
@@ -35,6 +39,15 @@ services:
       - code-server-config:/config
       - claude-config:/claude
     command: sh -c "chown -R 1000:1000 /data /config /claude"
+    restart: "no"
+
+  # Init container to fix volume permissions for homeportd
+  homeportd-init:
+    image: alpine:latest
+    container_name: homeportd-init
+    volumes:
+      - claude-config-homeport:/claude
+    command: sh -c "chown -R 1000:1000 /claude"
     restart: "no"
 
   # Code Server (browser-based VS Code)
@@ -88,5 +101,6 @@ volumes:
   code-server-data:
   code-server-config:
   claude-config:
+  claude-config-homeport:
   caddy-data:
   caddy-config:
