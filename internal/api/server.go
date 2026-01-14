@@ -135,6 +135,12 @@ func (s *Server) setupRouter() {
 			r.Post("/auth/change-password", s.handleChangePassword)
 		})
 
+		// Terminal WebSocket endpoint
+		r.Get("/api/terminal/{repoId}", s.handleTerminalWebSocket)
+
+		// Terminal page wrapper
+		r.Get("/terminal/{repoId}", s.handleTerminalPage)
+
 		// Code Server proxy at /code/*
 		r.Route("/code", func(r chi.Router) {
 			r.HandleFunc("/*", s.handleCodeServerProxy)

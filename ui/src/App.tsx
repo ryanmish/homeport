@@ -20,6 +20,7 @@ import {
   Check,
   X,
   Terminal,
+  Code,
   GitBranch,
   Share2,
   Timer,
@@ -1233,6 +1234,14 @@ function RepoCard({
             <Button variant="ghost" size="sm" onClick={onPull} className="hidden sm:flex h-8 w-8 p-0" title="Pull latest">
               <RefreshCw className="h-4 w-4" />
             </Button>
+            {/* Mobile: Terminal as primary */}
+            <a href={`/terminal/${repo.id}`} className="sm:hidden">
+              <Button variant="outline" size="sm" className="h-8">
+                <Terminal className="h-4 w-4 mr-1" />
+                Terminal
+              </Button>
+            </a>
+            {/* Desktop: VS Code as primary */}
             <a href={`/code/?folder=${toCodeServerPath(repo.path)}`} target="_blank" rel="noopener noreferrer" className="hidden sm:block">
               <Button variant="outline" size="sm" className="h-8">
                 Open in VS Code
@@ -1250,8 +1259,15 @@ function RepoCard({
                     rel="noopener noreferrer"
                     className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap sm:hidden ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
-                    <Terminal className="h-4 w-4" />
+                    <Code className="h-4 w-4" />
                     Open in VS Code
+                  </a>
+                  <a
+                    href={`/terminal/${repo.id}`}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  >
+                    <Terminal className="h-4 w-4" />
+                    Open Terminal
                   </a>
                   <button
                     onClick={() => { onPull(); setShowMenu(false); }}
