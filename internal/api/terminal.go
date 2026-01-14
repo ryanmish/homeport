@@ -749,8 +749,39 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         });
 
         // Mobile keyboard handling - resize terminal when virtual keyboard opens/closes
+        const isMobile = window.innerWidth <= 640;
+
+        function resetMobileLayout() {
+            if (!isMobile) return;
+            const container = document.getElementById('terminalContainer');
+            const toolbar = document.getElementById('mobileToolbar');
+            const headerHeight = 100;
+            const toolbarHeight = 52;
+
+            container.style.height = (window.innerHeight - headerHeight - toolbarHeight) + 'px';
+            if (toolbar) toolbar.style.bottom = '0px';
+
+            tabs.forEach(tab => {
+                tab.fitAddon.fit();
+                if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+                    tab.ws.send(JSON.stringify({ type: 'resize', cols: tab.term.cols, rows: tab.term.rows }));
+                }
+            });
+        }
+
+        // Detect keyboard dismiss via blur (fires immediately on iOS "Done")
+        if (isMobile) {
+            document.addEventListener('focusout', (e) => {
+                // Small delay to check if focus moved to another input
+                setTimeout(() => {
+                    if (!document.activeElement || document.activeElement === document.body) {
+                        resetMobileLayout();
+                    }
+                }, 50);
+            });
+        }
+
         if (window.visualViewport) {
-            const isMobile = window.innerWidth <= 640;
             window.visualViewport.addEventListener('resize', () => {
                 const currentHeight = window.visualViewport.height;
                 const container = document.getElementById('terminalContainer');
