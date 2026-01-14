@@ -821,49 +821,6 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             }
         }, { passive: true });
 
-        // Drag and drop file upload (saves to server, pastes path)
-        const termContainer = document.getElementById('terminalContainer');
-        termContainer.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            termContainer.style.outline = '2px dashed #3b82f6';
-        });
-        termContainer.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            termContainer.style.outline = 'none';
-        });
-        termContainer.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            termContainer.style.outline = 'none';
-
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                const file = files[0];
-                const formData = new FormData();
-                formData.append('file', file);
-
-                try {
-                    const resp = await fetch('/api/upload', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        const tab = tabs.find(t => t.id === activeTabId);
-                        if (tab && tab.ws && tab.ws.readyState === WebSocket.OPEN) {
-                            // Paste the file path into the terminal
-                            tab.ws.send(JSON.stringify({ type: 'input', data: data.path }));
-                        }
-                    } else {
-                        console.error('Upload failed:', await resp.text());
-                    }
-                } catch (err) {
-                    console.error('Upload error:', err);
-                }
-            }
-        });
-
         // Initialize
         applyTheme();
         (async function init() {
