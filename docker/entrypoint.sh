@@ -16,6 +16,13 @@ fi
 # Configure git to use gh CLI for GitHub authentication
 su-exec homeport git config --global credential.helper '!gh auth git-credential'
 
+# Add GitHub to SSH known_hosts (prevents "authenticity of host" prompt)
+mkdir -p /home/homeport/.ssh
+ssh-keyscan -t ed25519 github.com >> /home/homeport/.ssh/known_hosts 2>/dev/null
+chown -R homeport:homeport /home/homeport/.ssh
+chmod 700 /home/homeport/.ssh
+chmod 600 /home/homeport/.ssh/known_hosts
+
 # Mark repos directory as safe (avoids "dubious ownership" errors with mounted volumes)
 su-exec homeport git config --global --add safe.directory '*'
 
