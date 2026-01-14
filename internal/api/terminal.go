@@ -821,38 +821,6 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             }
         }, { passive: true });
 
-        // Drag and drop image support (experimental - for Claude Code)
-        const termContainer = document.getElementById('terminalContainer');
-        termContainer.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            termContainer.style.outline = '2px dashed #3b82f6';
-        });
-        termContainer.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            termContainer.style.outline = 'none';
-        });
-        termContainer.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            termContainer.style.outline = 'none';
-
-            const files = e.dataTransfer.files;
-            if (files.length > 0 && files[0].type.startsWith('image/')) {
-                const file = files[0];
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const base64 = reader.result; // data:image/png;base64,xxxxx
-                    const tab = tabs.find(t => t.id === activeTabId);
-                    if (tab && tab.ws && tab.ws.readyState === WebSocket.OPEN) {
-                        // Send the data URL to the terminal
-                        tab.ws.send(JSON.stringify({ type: 'input', data: base64 }));
-                    }
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
         // Initialize
         applyTheme();
         (async function init() {
