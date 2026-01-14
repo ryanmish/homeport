@@ -21,6 +21,7 @@ import (
 	"github.com/gethomeport/homeport/internal/config"
 	"github.com/gethomeport/homeport/internal/github"
 	"github.com/gethomeport/homeport/internal/process"
+	"github.com/gethomeport/homeport/internal/terminal"
 	"github.com/gethomeport/homeport/internal/proxy"
 	"github.com/gethomeport/homeport/internal/scanner"
 	"github.com/gethomeport/homeport/internal/share"
@@ -41,6 +42,7 @@ type Server struct {
 	github   *github.Client
 	procs    *process.Manager
 	auth     *auth.Auth
+	termMgr  *terminal.Manager
 	router   chi.Router
 	stopScan chan struct{}
 }
@@ -53,6 +55,7 @@ func NewServer(cfg *config.Config, st *store.Store) *Server {
 		github:   github.NewClient(cfg.ReposDir),
 		procs:    process.NewManager(),
 		auth:     auth.New(cfg.PasswordHash, cfg.CookieSecret),
+		termMgr:  terminal.NewManager(),
 		stopScan: make(chan struct{}),
 	}
 
