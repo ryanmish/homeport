@@ -13,6 +13,8 @@ services:
       - repos:/srv/homeport/repos
       # Mount gh CLI config for GitHub integration
       - ${HOME}/.config/gh:/home/homeport/.config/gh:ro
+      # Mount CLAUDE.md for Claude Code integration
+      - ./CLAUDE.md:/home/homeport/.claude/CLAUDE.md:ro
     environment:
       - HOMEPORT_EXTERNAL_URL=${EXTERNAL_URL:-http://localhost}
       - HOMEPORT_COOKIE_SECRET=${COOKIE_SECRET:-}
@@ -51,6 +53,7 @@ services:
       - code-server-config:/home/coder/.config/code-server
       - claude-config:/home/coder/.claude
       - ./code-server-settings.json:/home/coder/.local/share/code-server/User/settings.json:ro
+      - ./CLAUDE.md:/home/coder/.claude/CLAUDE.md:ro
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD:-}
       - DOCKER_USER=coder

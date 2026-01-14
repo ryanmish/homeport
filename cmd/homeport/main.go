@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -69,7 +70,61 @@ func main() {
 		Run:   runRepos,
 	}
 
-	rootCmd.AddCommand(listCmd, shareCmd, unshareCmd, urlCmd, statusCmd, reposCmd)
+	// clone command
+	cloneCmd := &cobra.Command{
+		Use:   "clone <owner/repo>",
+		Short: "Clone a GitHub repository",
+		Long:  "Clone a GitHub repository. Use format: owner/repo (e.g., facebook/react)",
+		Args:  cobra.ExactArgs(1),
+		Run:   runClone,
+	}
+
+	// start command
+	startCmd := &cobra.Command{
+		Use:   "start <repo>",
+		Short: "Start the dev server for a repository",
+		Args:  cobra.ExactArgs(1),
+		Run:   runStart,
+	}
+
+	// stop command
+	stopCmd := &cobra.Command{
+		Use:   "stop <repo>",
+		Short: "Stop the dev server for a repository",
+		Args:  cobra.ExactArgs(1),
+		Run:   runStop,
+	}
+
+	// logs command
+	logsCmd := &cobra.Command{
+		Use:   "logs <repo>",
+		Short: "Show dev server logs for a repository",
+		Args:  cobra.ExactArgs(1),
+		Run:   runLogs,
+	}
+	logsCmd.Flags().IntP("lines", "n", 50, "Number of log lines to show")
+	logsCmd.Flags().BoolP("follow", "f", false, "Follow log output (poll every 2s)")
+
+	// open command
+	openCmd := &cobra.Command{
+		Use:   "open <repo>",
+		Short: "Get the VS Code URL for a repository",
+		Args:  cobra.ExactArgs(1),
+		Run:   runOpen,
+	}
+
+	// terminal command
+	terminalCmd := &cobra.Command{
+		Use:   "terminal <repo>",
+		Short: "Get the terminal URL for a repository",
+		Args:  cobra.ExactArgs(1),
+		Run:   runTerminal,
+	}
+
+	rootCmd.AddCommand(
+		listCmd, shareCmd, unshareCmd, urlCmd, statusCmd, reposCmd,
+		cloneCmd, startCmd, stopCmd, logsCmd, openCmd, terminalCmd,
+	)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -97,10 +152,17 @@ type Status struct {
 }
 
 type Repo struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Path      string `json:"path"`
-	GitHubURL string `json:"github_url"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Path         string `json:"path"`
+	GitHubURL    string `json:"github_url"`
+	StartCommand string `json:"start_command"`
+}
+
+type LogEntry struct {
+	Time    string `json:"time"`
+	Message string `json:"message"`
+	Stream  string `json:"stream"`
 }
 
 func runList(cmd *cobra.Command, args []string) {
@@ -277,11 +339,247 @@ func runRepos(cmd *cobra.Command, args []string) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tPATH")
+	fmt.Fprintln(w, "NAME\tID\tPATH")
 	for _, r := range repos {
-		fmt.Fprintf(w, "%s\t%s\n", r.Name, r.Path)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", r.Name, r.ID, r.Path)
 	}
 	w.Flush()
+}
+
+func runClone(cmd *cobra.Command, args []string) {
+	repoFullName := args[0]
+
+	// Validate format
+	if !strings.Contains(repoFullName, "/") {
+		fmt.Fprintf(os.Stderr, "Error: invalid format. Use owner/repo (e.g., facebook/react)\n")
+		os.Exit(1)
+	}
+
+	fmt.Printf("Cloning %s...\n", repoFullName)
+
+	body := fmt.Sprintf(`{"repo":"%s"}`, repoFullName)
+	req, _ := http.NewRequest("POST", apiURL+"/repos/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		var errResp map[string]string
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		fmt.Fprintf(os.Stderr, "Error: %s\n", errResp["error"])
+		os.Exit(1)
+	}
+
+	var repo Repo
+	json.NewDecoder(resp.Body).Decode(&repo)
+	fmt.Printf("Cloned %s to %s\n", repo.Name, repo.Path)
+	fmt.Printf("Repo ID: %s\n", repo.ID)
+}
+
+func runStart(cmd *cobra.Command, args []string) {
+	repoName := args[0]
+
+	// Find repo by name or ID
+	repo := findRepo(repoName)
+	if repo == nil {
+		fmt.Fprintf(os.Stderr, "Error: repository '%s' not found\n", repoName)
+		fmt.Fprintf(os.Stderr, "Run 'homeport repos' to see available repositories\n")
+		os.Exit(1)
+	}
+
+	fmt.Printf("Starting dev server for %s...\n", repo.Name)
+
+	req, _ := http.NewRequest("POST", apiURL+"/process/"+repo.ID+"/start", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		fmt.Fprintf(os.Stderr, "Error: %s\n", errResp["error"])
+		os.Exit(1)
+	}
+
+	fmt.Printf("Dev server started for %s\n", repo.Name)
+	fmt.Println("Use 'homeport list' to see the port")
+}
+
+func runStop(cmd *cobra.Command, args []string) {
+	repoName := args[0]
+
+	// Find repo by name or ID
+	repo := findRepo(repoName)
+	if repo == nil {
+		fmt.Fprintf(os.Stderr, "Error: repository '%s' not found\n", repoName)
+		fmt.Fprintf(os.Stderr, "Run 'homeport repos' to see available repositories\n")
+		os.Exit(1)
+	}
+
+	fmt.Printf("Stopping dev server for %s...\n", repo.Name)
+
+	req, _ := http.NewRequest("POST", apiURL+"/process/"+repo.ID+"/stop", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		fmt.Fprintf(os.Stderr, "Error: %s\n", errResp["error"])
+		os.Exit(1)
+	}
+
+	fmt.Printf("Dev server stopped for %s\n", repo.Name)
+}
+
+func runLogs(cmd *cobra.Command, args []string) {
+	repoName := args[0]
+	lines, _ := cmd.Flags().GetInt("lines")
+	follow, _ := cmd.Flags().GetBool("follow")
+
+	// Find repo by name or ID
+	repo := findRepo(repoName)
+	if repo == nil {
+		fmt.Fprintf(os.Stderr, "Error: repository '%s' not found\n", repoName)
+		fmt.Fprintf(os.Stderr, "Run 'homeport repos' to see available repositories\n")
+		os.Exit(1)
+	}
+
+	lastTime := ""
+	for {
+		resp, err := http.Get(fmt.Sprintf("%s/process/%s/logs?limit=%d", apiURL, repo.ID, lines))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		var logs []LogEntry
+		json.NewDecoder(resp.Body).Decode(&logs)
+		resp.Body.Close()
+
+		if len(logs) == 0 && !follow {
+			fmt.Println("No logs available")
+			return
+		}
+
+		for _, log := range logs {
+			if follow && log.Time <= lastTime {
+				continue
+			}
+			prefix := ""
+			if log.Stream == "stderr" {
+				prefix = "[ERR] "
+			}
+			fmt.Printf("%s%s\n", prefix, log.Message)
+			lastTime = log.Time
+		}
+
+		if !follow {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func runOpen(cmd *cobra.Command, args []string) {
+	repoName := args[0]
+
+	// Find repo by name or ID
+	repo := findRepo(repoName)
+	if repo == nil {
+		fmt.Fprintf(os.Stderr, "Error: repository '%s' not found\n", repoName)
+		fmt.Fprintf(os.Stderr, "Run 'homeport repos' to see available repositories\n")
+		os.Exit(1)
+	}
+
+	// Get external URL
+	resp, err := http.Get(apiURL + "/status")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	var status Status
+	json.NewDecoder(resp.Body).Decode(&status)
+
+	url := fmt.Sprintf("%s/code/?folder=/home/coder/repos/%s", status.Config.ExternalURL, repo.Name)
+	fmt.Println(url)
+}
+
+func runTerminal(cmd *cobra.Command, args []string) {
+	repoName := args[0]
+
+	// Find repo by name or ID
+	repo := findRepo(repoName)
+	if repo == nil {
+		fmt.Fprintf(os.Stderr, "Error: repository '%s' not found\n", repoName)
+		fmt.Fprintf(os.Stderr, "Run 'homeport repos' to see available repositories\n")
+		os.Exit(1)
+	}
+
+	// Get external URL
+	resp, err := http.Get(apiURL + "/status")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	var status Status
+	json.NewDecoder(resp.Body).Decode(&status)
+
+	url := fmt.Sprintf("%s/terminal/%s", status.Config.ExternalURL, repo.ID)
+	fmt.Println(url)
+}
+
+// findRepo finds a repo by name or ID
+func findRepo(nameOrID string) *Repo {
+	resp, err := http.Get(apiURL + "/repos")
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var repos []Repo
+	if err := json.NewDecoder(resp.Body).Decode(&repos); err != nil {
+		return nil
+	}
+
+	// Try exact match on ID first
+	for _, r := range repos {
+		if r.ID == nameOrID {
+			return &r
+		}
+	}
+
+	// Try exact match on name
+	for _, r := range repos {
+		if r.Name == nameOrID {
+			return &r
+		}
+	}
+
+	// Try case-insensitive match on name
+	for _, r := range repos {
+		if strings.EqualFold(r.Name, nameOrID) {
+			return &r
+		}
+	}
+
+	return nil
 }
 
 // Unused but keeping for reference
