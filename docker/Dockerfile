@@ -41,6 +41,7 @@ RUN apk add --no-cache \
     nodejs \
     npm \
     bash \
+    su-exec \
     && rm -rf /var/cache/apk/*
 
 # Install Claude Code globally
@@ -53,9 +54,9 @@ RUN adduser -D -h /home/homeport homeport
 RUN mkdir -p /srv/homeport/data /srv/homeport/repos /srv/homeport/ui \
     && chown -R homeport:homeport /srv/homeport
 
-# Create Claude config directory
-RUN mkdir -p /home/homeport/.claude \
-    && chown -R homeport:homeport /home/homeport/.claude
+# Create config directories (Claude, general .config for tools like Astro)
+RUN mkdir -p /home/homeport/.claude /home/homeport/.config \
+    && chown -R homeport:homeport /home/homeport
 
 WORKDIR /srv/homeport
 
@@ -69,8 +70,9 @@ COPY --from=ui-builder /build/ui/dist /srv/homeport/ui/
 # Copy default config
 COPY docker/homeport.yaml /srv/homeport/config.yaml
 
-# Switch to app user
-USER homeport
+# Copy entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Expose API port
 EXPOSE 8080
@@ -79,5 +81,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget -qO- http://localhost:8080/api/status || exit 1
 
-ENTRYPOINT ["homeportd"]
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["--config", "/srv/homeport/config.yaml"]
