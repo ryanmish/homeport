@@ -406,48 +406,52 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             bottom: 0;
             left: 0;
             right: 0;
-            height: 44px;
-            padding: 4px 8px;
-            gap: 6px;
+            height: 52px;
+            padding: 8px;
+            gap: 8px;
             z-index: 200;
             align-items: center;
-            justify-content: center;
         }
-        body.dark .mobile-toolbar { background: #2d2d2d; border-top: 1px solid #3c3c3c; }
-        body.light .mobile-toolbar { background: #f3f4f6; border-top: 1px solid #e5e7eb; }
+        body.dark .mobile-toolbar { background: #1e1e1e; border-top: 1px solid #3c3c3c; }
+        body.light .mobile-toolbar { background: #f9fafb; border-top: 1px solid #e5e7eb; }
 
         .mobile-toolbar button {
             height: 36px;
-            min-width: 44px;
-            padding: 0 12px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             font-size: 14px;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
         body.dark .mobile-toolbar button { background: #3c3c3c; color: #e5e5e5; }
-        body.light .mobile-toolbar button { background: #ffffff; color: #374151; border: 1px solid #d1d5db; }
-        .mobile-toolbar button:active { opacity: 0.7; }
+        body.light .mobile-toolbar button { background: #ffffff; color: #374151; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .mobile-toolbar button:active { transform: scale(0.95); opacity: 0.8; }
+
+        .mobile-toolbar .key-btn {
+            flex: 1;
+            min-width: 0;
+        }
 
         .mobile-toolbar .arrow-group {
             display: flex;
-            gap: 2px;
+            gap: 4px;
         }
         .mobile-toolbar .arrow-group button {
-            min-width: 36px;
-            padding: 0 8px;
+            width: 36px;
+            height: 36px;
+            font-size: 16px;
         }
 
         /* Mobile touch hints */
         @media (max-width: 640px) {
             .nav-breadcrumb { display: none; }
-            .terminal-container { padding: 4px; padding-bottom: 52px; }
-            .terminal-pane { inset: 4px; bottom: 48px; }
+            .terminal-container { padding: 4px; padding-bottom: 60px; }
+            .terminal-pane { inset: 4px; bottom: 56px; }
             .mobile-toolbar { display: flex; }
         }
     </style>
@@ -486,9 +490,9 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
     <div id="connectionStatus" class="connection-status connecting">Connecting...</div>
 
     <div class="mobile-toolbar" id="mobileToolbar">
-        <button onclick="sendKey('Escape')">Esc</button>
-        <button onclick="sendKey('Tab')">Tab</button>
-        <button onclick="sendCtrlC()">⌃C</button>
+        <button class="key-btn" onclick="sendKey('Escape')">Esc</button>
+        <button class="key-btn" onclick="sendKey('Tab')">Tab</button>
+        <button class="key-btn" onclick="sendCtrlC()">⌃C</button>
         <div class="arrow-group">
             <button onclick="sendKey('ArrowLeft')">←</button>
             <button onclick="sendKey('ArrowUp')">↑</button>
@@ -738,7 +742,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 
                 // Adjust container height to fit above keyboard and toolbar
                 const headerHeight = 100; // header + tab bar
-                const toolbarHeight = isMobile ? 44 : 0;
+                const toolbarHeight = isMobile ? 52 : 0;
                 container.style.height = (currentHeight - headerHeight - toolbarHeight) + 'px';
 
                 // Move toolbar above keyboard
