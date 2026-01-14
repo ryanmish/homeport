@@ -239,6 +239,7 @@ main() {
     [ -d "$HOME/.cloudflared" ] && echo -e "${RED}[!]${NC} ~/.cloudflared still exists" && ISSUES=1
     [ -d "$HOME/.homeport" ] && echo -e "${RED}[!]${NC} ~/.homeport still exists" && ISSUES=1
     [ -f "/usr/local/bin/homeport" ] && echo -e "${RED}[!]${NC} CLI still exists" && ISSUES=1
+    [ -d "$HOMEPORT_DIR" ] && echo -e "${RED}[!]${NC} $HOMEPORT_DIR still exists" && ISSUES=1
 
     if [ "$ISSUES" -eq 0 ]; then
         echo -e "${GREEN}[*]${NC} All components removed successfully"
