@@ -156,9 +156,16 @@ func (s *Server) handleTerminalWebSocket(w http.ResponseWriter, r *http.Request)
 	// Send session ID to client
 	conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"session","id":"%s"}`, session.ID)))
 
-	// Replay scrollback history
+	// Replay scrollback history with terminal reset first
+	// This prevents corruption when reconnecting to sessions that were using alternate screen
 	scrollback := session.GetScrollback()
 	if len(scrollback) > 0 {
+		// Send RIS (Reset to Initial State) followed by the scrollback
+		// This clears any corrupted state from alternate screen mode
+		reset := []byte("\033c") // RIS escape sequence
+		if err := conn.WriteMessage(websocket.BinaryMessage, reset); err != nil {
+			log.Printf("Failed to send reset: %v", err)
+		}
 		if err := conn.WriteMessage(websocket.BinaryMessage, scrollback); err != nil {
 			log.Printf("Failed to send scrollback: %v", err)
 		}
@@ -521,7 +528,6 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             term.loadAddon(fitAddon);
             term.loadAddon(new WebLinksAddon.WebLinksAddon());
             term.open(pane);
-            fitAddon.fit();
 
             const tab = { id, term, fitAddon, pane, ws: null, sessionId, reconnectAttempts: 0, closing: false };
             tabs.push(tab);
@@ -532,8 +538,15 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
                 }
             });
 
-            connectTab(tab, sessionId);
+            // Make pane active BEFORE fitting to get correct dimensions
             switchTab(id);
+
+            // Fit after visible, then connect with correct dimensions
+            requestAnimationFrame(() => {
+                fitAddon.fit();
+                connectTab(tab, sessionId);
+            });
+
             renderTabs();
             return tab;
         }

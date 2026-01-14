@@ -2,7 +2,7 @@
 
 ## Bugs
 
-- [ ] Claude TUI rendering issue - text input box moves down instead of staying fixed at bottom (investigate alternate screen buffer / xterm.js compatibility)
+- [x] Claude TUI rendering issue - text input box moves down instead of staying fixed at bottom (FIXED: improved terminal size timing, scrollback handling for alternate screen mode)
 
 ## Improvements
 

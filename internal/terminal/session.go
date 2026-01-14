@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,20 @@ import (
 const (
 	// MaxScrollback is the maximum size of the scrollback buffer (100KB)
 	MaxScrollback = 100 * 1024
+)
+
+// Alternate screen escape sequences (smcup/rmcup)
+var (
+	altScreenEnter = [][]byte{
+		[]byte("\x1b[?1049h"), // Most common (xterm)
+		[]byte("\x1b[?47h"),   // Legacy
+		[]byte("\x1b[?1047h"), // Another variant
+	}
+	altScreenExit = [][]byte{
+		[]byte("\x1b[?1049l"),
+		[]byte("\x1b[?47l"),
+		[]byte("\x1b[?1047l"),
+	}
 )
 
 // Session represents a terminal session with a PTY
@@ -34,6 +49,10 @@ type Session struct {
 	// Scrollback buffer for replay on reconnect
 	scrollback   []byte
 	scrollbackMu sync.RWMutex
+
+	// Track alternate screen mode (TUI apps use this)
+	// When in alternate screen, we don't save to scrollback
+	inAltScreen bool
 
 	// Subscribers for live output broadcast
 	subscribers   []chan []byte
@@ -85,8 +104,8 @@ func (m *Manager) CreateSession(repoID, repoPath string) (*Session, error) {
 		return nil, fmt.Errorf("failed to start PTY: %w", err)
 	}
 
-	// Set default size
-	pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80})
+	// Set default size (larger default to accommodate TUI apps before resize)
+	pty.Setsize(ptmx, &pty.Winsize{Rows: 40, Cols: 120})
 
 	session := &Session{
 		ID:          uuid.New().String(),
@@ -174,12 +193,30 @@ func (s *Session) readLoop() {
 			data := make([]byte, n)
 			copy(data, buf[:n])
 
-			// Add to scrollback buffer
+			// Check for alternate screen mode transitions
 			s.scrollbackMu.Lock()
-			s.scrollback = append(s.scrollback, data...)
-			// Trim if exceeds max size
-			if len(s.scrollback) > MaxScrollback {
-				s.scrollback = s.scrollback[len(s.scrollback)-MaxScrollback:]
+			for _, seq := range altScreenEnter {
+				if bytes.Contains(data, seq) {
+					s.inAltScreen = true
+					break
+				}
+			}
+			for _, seq := range altScreenExit {
+				if bytes.Contains(data, seq) {
+					s.inAltScreen = false
+					break
+				}
+			}
+
+			// Only add to scrollback when NOT in alternate screen mode
+			// TUI apps (like Claude Code) use alternate screen and shouldn't
+			// corrupt the scrollback buffer
+			if !s.inAltScreen {
+				s.scrollback = append(s.scrollback, data...)
+				// Trim if exceeds max size
+				if len(s.scrollback) > MaxScrollback {
+					s.scrollback = s.scrollback[len(s.scrollback)-MaxScrollback:]
+				}
 			}
 			s.scrollbackMu.Unlock()
 
