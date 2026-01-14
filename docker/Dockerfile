@@ -42,6 +42,7 @@ RUN apk add --no-cache \
     npm \
     bash \
     su-exec \
+    icu-data-full \
     && rm -rf /var/cache/apk/*
 
 # Install Claude Code globally
