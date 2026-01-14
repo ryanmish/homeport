@@ -492,6 +492,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
     <div class="mobile-toolbar" id="mobileToolbar">
         <button class="key-btn" onmousedown="sendKey('Escape', event)" ontouchstart="sendKey('Escape', event)">Esc</button>
         <button class="key-btn" onmousedown="sendKey('Tab', event)" ontouchstart="sendKey('Tab', event)">Tab</button>
+        <button class="key-btn" onmousedown="sendKey('ShiftTab', event)" ontouchstart="sendKey('ShiftTab', event)">⇧Tab</button>
         <button class="key-btn" onmousedown="sendCtrlC(event)" ontouchstart="sendCtrlC(event)">⌃C</button>
         <div class="arrow-group">
             <button onmousedown="sendKey('ArrowLeft', event)" ontouchstart="sendKey('ArrowLeft', event)">←</button>
@@ -541,6 +542,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         const keyMap = {
             'Escape': '\x1b',
             'Tab': '\t',
+            'ShiftTab': '\x1b[Z',
             'ArrowUp': '\x1b[A',
             'ArrowDown': '\x1b[B',
             'ArrowRight': '\x1b[C',
