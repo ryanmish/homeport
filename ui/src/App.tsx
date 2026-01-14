@@ -1429,7 +1429,7 @@ function PortRow({
   }
 
   return (
-    <div className={`flex items-center justify-between p-3 rounded-lg transition-colors group ${theme === 'dark' ? 'bg-gray-800/50 hover:bg-gray-800' : 'bg-gray-50 hover:bg-gray-100'}`}>
+    <div className={`flex items-center justify-between p-3 rounded-lg group ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         {/* Health indicator */}
         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isHealthy === true ? 'bg-green-500' : isHealthy === false ? 'bg-red-500' : 'bg-gray-400'}`} title={isHealthy ? 'Responding' : 'Not responding'} />

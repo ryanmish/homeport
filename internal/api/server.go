@@ -301,12 +301,12 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         iframe { margin: 0; padding: 0; box-sizing: border-box; }
 
         .homeport-header {
-            height: 56px;
+            height: 64px;
             background: #ffffff;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 12px;
+            padding: 0 16px;
         }
 
         .header-left {
@@ -318,7 +318,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         .logo-box {
             width: 36px;
             height: 36px;
-            border-radius: 10px;
+            border-radius: 12px;
             overflow: hidden;
         }
 
@@ -392,61 +392,54 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         }
 
         .header-btn {
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 13px;
+            height: 32px;
+            width: 32px;
+            padding: 0;
+            border-radius: 6px;
+            font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.15s;
-            display: flex;
+            display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
-            border: 1px solid #e5e7eb;
-            background: white;
-            color: #374151;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #6b7280;
             text-decoration: none;
         }
 
         .header-btn:hover {
-            background: #f9fafb;
-            border-color: #d1d5db;
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .header-btn.primary {
+            height: 36px;
+            width: auto;
+            padding: 0 12px;
             background: #111827;
             color: white;
             border-color: #111827;
         }
 
         .header-btn.primary:hover {
-            background: #374151;
+            background: rgba(17, 24, 39, 0.9);
         }
 
         .header-btn.danger {
             color: #dc2626;
-            border-color: #fecaca;
         }
 
         .header-btn.danger:hover {
             background: #fef2f2;
+            color: #dc2626;
         }
 
         .header-btn svg {
-            width: 14px;
-            height: 14px;
-        }
-
-        .header-btn.primary.start-server-btn {
-            height: 36px;
-            padding: 0 12px;
-            font-size: 14px;
-            font-weight: 500;
-            border-radius: 6px;
-            border: none;
-        }
-
-        .header-btn.primary.start-server-btn:hover {
-            background: rgba(17, 24, 39, 0.9);
+            width: 16px;
+            height: 16px;
         }
 
         .server-running-controls {
@@ -465,7 +458,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
 
         iframe {
             width: 100%%;
-            height: calc(100%% - 56px);
+            height: calc(100%% - 64px);
             border: none;
         }
 
