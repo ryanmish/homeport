@@ -1116,7 +1116,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                         resetStartButton();
                     }
                 };
-                setTimeout(pollForPort, 500);
+                setTimeout(pollForPort, 1500);
             } catch (e) {
                 console.error('Failed to start server:', e);
                 resetStartButton();
@@ -1177,7 +1177,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                             checkPorts();
                         }
                     };
-                    setTimeout(pollForStop, 500);
+                    setTimeout(pollForStop, 1500);
                 }
             } catch (e) {
                 console.error('Failed to stop server:', e);
@@ -1389,8 +1389,8 @@ func (s *Server) doScan() {
 		}
 	}
 
-	// Clean up stale ports (not seen in last 30 seconds)
-	staleThreshold := time.Now().Add(-30 * time.Second)
+	// Clean up stale ports (not seen in last 10 seconds)
+	staleThreshold := time.Now().Add(-10 * time.Second)
 	if err := s.store.CleanupStalePorts(staleThreshold); err != nil {
 		log.Printf("Failed to cleanup stale ports: %v", err)
 	}

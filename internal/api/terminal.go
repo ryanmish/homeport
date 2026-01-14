@@ -163,12 +163,6 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine WebSocket URL
-	wsProtocol := "ws"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		wsProtocol = "wss"
-	}
-
 	page := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -354,7 +348,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
     <script>
         const REPO_ID = '%s';
-        const WS_URL = '%s://' + window.location.host + '/api/terminal/' + REPO_ID;
+        const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host + '/api/terminal/' + REPO_ID;
 
         let term;
         let ws;
@@ -490,7 +484,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         }
     </script>
 </body>
-</html>`, repo.Name, repo.Name, repo.Name, repoID, wsProtocol)
+</html>`, repo.Name, repo.Name, repo.Name, repoID)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(page))

@@ -713,6 +713,25 @@ func (s *Server) handleStopProcess(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Wait up to 3 seconds for process to actually exit
+	for i := 0; i < 6; i++ {
+		time.Sleep(500 * time.Millisecond)
+		proc := s.procs.Get(repoID)
+		if proc == nil || proc.Status != "running" {
+			break
+		}
+	}
+
+	// Force port scan to update database immediately
+	s.doScan()
+
+	// Also directly remove ports from database for this repo
+	for _, port := range ports {
+		if port.RepoID == repoID {
+			s.store.DeletePort(port.Port)
+		}
+	}
+
 	activity.LogStop(repoID, repoName)
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "stopped"})
 }

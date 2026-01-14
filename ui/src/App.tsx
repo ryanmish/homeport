@@ -361,7 +361,7 @@ function App() {
           })
         }
       }
-      await new Promise(r => setTimeout(r, 500))
+      await new Promise(r => setTimeout(r, 1500))
       await pollForPort()
     } catch (err) {
       toast.error(`Failed to start: ${err}`)
@@ -404,7 +404,7 @@ function App() {
           })
         }
       }
-      await new Promise(r => setTimeout(r, 500))
+      await new Promise(r => setTimeout(r, 1500))
       await pollForStop()
     } catch (err) {
       toast.error('Failed to stop')
