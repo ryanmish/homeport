@@ -20,9 +20,10 @@ su-exec homeport git config --global credential.helper '!gh auth git-credential'
 su-exec homeport git config --global --add safe.directory '*'
 
 # Configure git user from GitHub if authenticated (for commits)
-if su-exec homeport gh auth status >/dev/null 2>&1; then
-    GH_USER=$(su-exec homeport gh api user --jq '.login' 2>/dev/null)
-    GH_EMAIL=$(su-exec homeport gh api user --jq '.email // ""' 2>/dev/null)
+# Use env to ensure HOME is passed to su-exec'd process
+if env HOME=$HOME su-exec homeport gh auth status >/dev/null 2>&1; then
+    GH_USER=$(env HOME=$HOME su-exec homeport gh api user --jq '.login' 2>/dev/null)
+    GH_EMAIL=$(env HOME=$HOME su-exec homeport gh api user --jq '.email // ""' 2>/dev/null)
     if [ -n "$GH_USER" ]; then
         su-exec homeport git config --global user.name "$GH_USER"
         # Use noreply email if no public email set
