@@ -31,7 +31,8 @@ services:
     volumes:
       - code-server-data:/data
       - code-server-config:/config
-    command: sh -c "chown -R 1000:1000 /data /config"
+      - claude-config:/claude
+    command: sh -c "chown -R 1000:1000 /data /config /claude"
     restart: "no"
 
   # Code Server (browser-based VS Code)

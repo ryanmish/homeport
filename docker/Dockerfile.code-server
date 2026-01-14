@@ -25,3 +25,7 @@ COPY --chown=coder:coder code-server-settings.json /home/coder/.local/share/code
 RUN mkdir -p /home/coder/repos/.vscode && \
     echo '{"workbench.startupEditor":"none","terminal.integrated.tabs.defaultIcon":"terminal"}' > /home/coder/repos/.vscode/settings.json && \
     chown -R coder:coder /home/coder/repos/.vscode
+
+# Create Claude Code config directory (will be mounted as volume for persistence)
+RUN mkdir -p /home/coder/.claude && \
+    chown -R coder:coder /home/coder/.claude
