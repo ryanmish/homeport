@@ -62,7 +62,10 @@ export function ShareMenu({
   )
 
   return (
-    <div className={`absolute right-0 top-full mt-1 w-80 rounded-xl shadow-lg border p-4 z-50 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+    <div
+      className={`absolute right-0 top-full mt-1 w-80 rounded-xl shadow-lg border p-4 z-50 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="space-y-4">
         <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Share Settings</div>
 
