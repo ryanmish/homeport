@@ -201,6 +201,21 @@ func (a *Auth) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// Allow localhost API requests without auth (for CLI inside container)
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			host := r.Host
+			if colonIdx := strings.LastIndex(host, ":"); colonIdx != -1 {
+				host = host[:colonIdx]
+			}
+			if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+				// Check if request is coming directly to localhost (not proxied)
+				if r.Header.Get("X-Forwarded-For") == "" && r.Header.Get("X-Real-IP") == "" {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+		}
+
 		// Check for valid session cookie
 		cookie, err := r.Cookie(SessionCookieName)
 		if err == nil && a.ValidateSession(cookie.Value) {

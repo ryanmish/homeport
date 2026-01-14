@@ -331,6 +331,11 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         .terminal-pane { position: absolute; inset: 8px; display: none; }
         .terminal-pane.active { display: block; }
 
+        /* xterm selection styling */
+        .xterm-selection { opacity: 1 !important; }
+        body.dark .xterm-selection div { background-color: rgba(255, 255, 255, 0.3) !important; }
+        body.light .xterm-selection div { background-color: rgba(0, 100, 200, 0.3) !important; }
+
         .connection-status {
             position: fixed; bottom: 16px; right: 16px;
             padding: 8px 16px; border-radius: 8px;
@@ -400,6 +405,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-clipboard@0.1.0/lib/addon-clipboard.min.js"></script>
     <script>
         const REPO_ID = '%s';
         const STORAGE_KEY = 'homeport_terminal_' + REPO_ID;
@@ -489,14 +495,37 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             const term = new Terminal({
                 cursorBlink: true, fontSize: 14,
                 fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-                theme: theme === 'dark' ? darkTheme : lightTheme
+                theme: theme === 'dark' ? darkTheme : lightTheme,
+                allowProposedApi: true
             });
 
             const fitAddon = new FitAddon.FitAddon();
             term.loadAddon(fitAddon);
             term.loadAddon(new WebLinksAddon.WebLinksAddon());
+            if (typeof ClipboardAddon !== 'undefined') {
+                term.loadAddon(new ClipboardAddon.ClipboardAddon());
+            }
             term.open(pane);
             fitAddon.fit();
+
+            // Enable copy on selection
+            term.onSelectionChange(() => {
+                const selection = term.getSelection();
+                if (selection) {
+                    navigator.clipboard.writeText(selection).catch(() => {});
+                }
+            });
+
+            // Right-click paste
+            pane.addEventListener('contextmenu', async (e) => {
+                e.preventDefault();
+                try {
+                    const text = await navigator.clipboard.readText();
+                    if (text && tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+                        tab.ws.send(JSON.stringify({ type: 'input', data: text }));
+                    }
+                } catch {}
+            });
 
             const tab = { id, term, fitAddon, pane, ws: null, sessionId, reconnectAttempts: 0 };
             tabs.push(tab);
