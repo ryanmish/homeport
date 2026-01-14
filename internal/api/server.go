@@ -135,6 +135,9 @@ func (s *Server) setupRouter() {
 			r.Get("/updates", s.handleCheckUpdates)
 			r.Get("/activity", s.handleGetActivity)
 
+			// File upload for terminal drag-drop
+			r.Post("/upload", s.handleFileUpload)
+
 			// Auth management endpoints
 			r.Post("/auth/change-password", s.handleChangePassword)
 
@@ -1525,4 +1528,47 @@ func portFromContext(ctx context.Context) int {
 		return v.(int)
 	}
 	return 0
+}
+
+// handleFileUpload handles file uploads for terminal drag-drop
+func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
+	// Limit upload size to 10MB
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, "Failed to read file: "+err.Error())
+		return
+	}
+	defer file.Close()
+
+	// Create uploads directory if it doesn't exist
+	uploadDir := "/srv/homeport/uploads"
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		errorResponse(w, http.StatusInternalServerError, "Failed to create upload directory")
+		return
+	}
+
+	// Generate unique filename
+	ext := filepath.Ext(header.Filename)
+	filename := fmt.Sprintf("%s_%d%s", generateID(), time.Now().Unix(), ext)
+	filePath := filepath.Join(uploadDir, filename)
+
+	// Create destination file
+	dst, err := os.Create(filePath)
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, "Failed to create file")
+		return
+	}
+	defer dst.Close()
+
+	// Copy file content
+	if _, err := dst.ReadFrom(file); err != nil {
+		errorResponse(w, http.StatusInternalServerError, "Failed to save file")
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]string{
+		"path": filePath,
+	})
 }
