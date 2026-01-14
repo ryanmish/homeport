@@ -490,14 +490,14 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
     <div id="connectionStatus" class="connection-status connecting">Connecting...</div>
 
     <div class="mobile-toolbar" id="mobileToolbar">
-        <button class="key-btn" onclick="sendKey('Escape')">Esc</button>
-        <button class="key-btn" onclick="sendKey('Tab')">Tab</button>
-        <button class="key-btn" onclick="sendCtrlC()">⌃C</button>
+        <button class="key-btn" onmousedown="sendKey('Escape', event)" ontouchstart="sendKey('Escape', event)">Esc</button>
+        <button class="key-btn" onmousedown="sendKey('Tab', event)" ontouchstart="sendKey('Tab', event)">Tab</button>
+        <button class="key-btn" onmousedown="sendCtrlC(event)" ontouchstart="sendCtrlC(event)">⌃C</button>
         <div class="arrow-group">
-            <button onclick="sendKey('ArrowLeft')">←</button>
-            <button onclick="sendKey('ArrowUp')">↑</button>
-            <button onclick="sendKey('ArrowDown')">↓</button>
-            <button onclick="sendKey('ArrowRight')">→</button>
+            <button onmousedown="sendKey('ArrowLeft', event)" ontouchstart="sendKey('ArrowLeft', event)">←</button>
+            <button onmousedown="sendKey('ArrowUp', event)" ontouchstart="sendKey('ArrowUp', event)">↑</button>
+            <button onmousedown="sendKey('ArrowDown', event)" ontouchstart="sendKey('ArrowDown', event)">↓</button>
+            <button onmousedown="sendKey('ArrowRight', event)" ontouchstart="sendKey('ArrowRight', event)">→</button>
         </div>
     </div>
 
@@ -547,20 +547,32 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             'ArrowLeft': '\x1b[D'
         };
 
-        function sendKey(key) {
+        function sendKey(key, event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
             const tab = tabs.find(t => t.id === activeTabId);
             if (tab && tab.ws && tab.ws.readyState === WebSocket.OPEN) {
                 const seq = keyMap[key] || '';
                 if (seq) {
                     tab.ws.send(JSON.stringify({ type: 'input', data: seq }));
                 }
+                // Refocus terminal to keep keyboard open
+                setTimeout(() => tab.term.focus(), 10);
             }
         }
 
-        function sendCtrlC() {
+        function sendCtrlC(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
             const tab = tabs.find(t => t.id === activeTabId);
             if (tab && tab.ws && tab.ws.readyState === WebSocket.OPEN) {
                 tab.ws.send(JSON.stringify({ type: 'input', data: '\x03' }));
+                // Refocus terminal to keep keyboard open
+                setTimeout(() => tab.term.focus(), 10);
             }
         }
 
