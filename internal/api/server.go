@@ -135,6 +135,15 @@ func (s *Server) setupRouter() {
 			r.Post("/auth/change-password", s.handleChangePassword)
 		})
 
+		// Serve VS Code share component files
+		r.Get("/vscode/*", func(w http.ResponseWriter, r *http.Request) {
+			if s.cfg.UIDir != "" {
+				http.StripPrefix("/vscode/", http.FileServer(http.Dir(s.cfg.UIDir+"/vscode"))).ServeHTTP(w, r)
+				return
+			}
+			http.NotFound(w, r)
+		})
+
 		// Code Server proxy at /code/*
 		r.Route("/code", func(r chi.Router) {
 			r.HandleFunc("/*", s.handleCodeServerProxy)
