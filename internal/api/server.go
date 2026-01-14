@@ -436,15 +436,17 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             height: 14px;
         }
 
-        .start-server-btn {
+        .header-btn.primary.start-server-btn {
             height: 36px;
             padding: 0 12px;
             font-size: 14px;
+            font-weight: 500;
             border-radius: 6px;
+            border: none;
         }
 
-        .start-server-btn:hover {
-            background: #1e293b;
+        .header-btn.primary.start-server-btn:hover {
+            background: rgba(17, 24, 39, 0.9);
         }
 
         .server-running-controls {

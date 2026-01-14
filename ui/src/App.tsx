@@ -1117,16 +1117,6 @@ function RepoCard({
                   </button>
                   <CardTitle className="text-base font-semibold truncate">{repo.name}</CardTitle>
                 </div>
-                {repo.github_url && (
-                  <a
-                    href={repo.github_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`transition-colors flex-shrink-0 ${theme === 'dark' ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
-                  >
-                    <Github className="h-4 w-4" />
-                  </a>
-                )}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {gitStatus && (
@@ -1196,6 +1186,19 @@ function RepoCard({
 
           {/* Right side: actions */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* GitHub link */}
+            {repo.github_url && (
+              <a
+                href={repo.github_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:block"
+              >
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Open on GitHub">
+                  <Github className="h-4 w-4" />
+                </Button>
+              </a>
+            )}
             {/* Quick actions menu */}
             <div className="relative hidden sm:block" ref={quickActionsRef}>
               <Button variant="ghost" size="sm" onClick={() => setShowQuickActions(!showQuickActions)} className="h-8 w-8 p-0" title="Quick actions">
