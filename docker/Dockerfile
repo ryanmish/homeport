@@ -40,7 +40,11 @@ RUN apk add --no-cache \
     github-cli \
     nodejs \
     npm \
+    bash \
     && rm -rf /var/cache/apk/*
+
+# Install Claude Code globally
+RUN npm install -g @anthropic-ai/claude-code
 
 # Create app user
 RUN adduser -D -h /home/homeport homeport
@@ -48,6 +52,10 @@ RUN adduser -D -h /home/homeport homeport
 # Create directories
 RUN mkdir -p /srv/homeport/data /srv/homeport/repos /srv/homeport/ui \
     && chown -R homeport:homeport /srv/homeport
+
+# Create Claude config directory
+RUN mkdir -p /home/homeport/.claude \
+    && chown -R homeport:homeport /home/homeport/.claude
 
 WORKDIR /srv/homeport
 

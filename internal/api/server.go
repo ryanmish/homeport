@@ -21,11 +21,12 @@ import (
 	"github.com/gethomeport/homeport/internal/config"
 	"github.com/gethomeport/homeport/internal/github"
 	"github.com/gethomeport/homeport/internal/process"
-	"github.com/gethomeport/homeport/internal/terminal"
 	"github.com/gethomeport/homeport/internal/proxy"
 	"github.com/gethomeport/homeport/internal/scanner"
 	"github.com/gethomeport/homeport/internal/share"
 	"github.com/gethomeport/homeport/internal/store"
+	"github.com/gethomeport/homeport/internal/terminal"
+	"github.com/gethomeport/homeport/internal/version"
 )
 
 // generateID creates a random 8-character hex ID
@@ -335,6 +336,25 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             width: 100%%;
             height: 100%%;
             object-fit: cover;
+        }
+
+        .brand-link {
+            display: flex;
+            flex-direction: column;
+            text-decoration: none;
+        }
+
+        .brand-name {
+            font-size: 16px;
+            font-weight: 600;
+            line-height: 1.2;
+            color: #111827;
+        }
+
+        .brand-version {
+            font-size: 12px;
+            font-family: monospace;
+            color: #9ca3af;
         }
 
         .nav-breadcrumb {
@@ -866,8 +886,11 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
                     <img src="/favicon.webp" alt="Homeport">
                 </div>
             </a>
+            <a href="/" class="brand-link">
+                <span class="brand-name">Homeport</span>
+                <span class="brand-version">v%s</span>
+            </a>
             <div class="nav-breadcrumb">
-                <a href="/">Dashboard</a>
                 <span class="sep">/</span>
                 <span class="current">%s</span>
             </div>
@@ -1314,7 +1337,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         setInterval(checkPorts, 3000);
     </script>
 </body>
-</html>`, repoName, iframeSrc, repoName, s.cfg.ExternalURL)
+</html>`, version.Version, repoName, iframeSrc, repoName, s.cfg.ExternalURL)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(wrapper))
 }

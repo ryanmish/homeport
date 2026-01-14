@@ -149,6 +149,31 @@ EOF
     fi
     echo ""
 
+    echo -e "${BLUE}[T-3.5] AI copilot: Claude Code${NC}"
+    echo "==========================================="
+
+    # Check if Node.js is installed
+    if command -v node &> /dev/null; then
+        NODE_VERSION=$(node --version | tr -d 'v')
+        NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1)
+        echo -e "${GREEN}[*]${NC} Node.js already installed (v$NODE_VERSION)"
+    else
+        echo "Installing Node.js..."
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt-get install -y -qq nodejs
+        echo -e "${GREEN}[*]${NC} Node.js installed"
+    fi
+
+    # Install Claude Code globally
+    if command -v claude &> /dev/null; then
+        echo -e "${GREEN}[*]${NC} Claude Code already installed"
+    else
+        echo "Installing Claude Code..."
+        sudo npm install -g @anthropic-ai/claude-code
+        echo -e "${GREEN}[*]${NC} Claude Code installed"
+    fi
+    echo ""
+
     echo -e "${BLUE}[T-3] Navigation systems: Cloudflare Tunnel${NC}"
     echo "============================================="
 

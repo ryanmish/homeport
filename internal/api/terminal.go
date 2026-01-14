@@ -12,6 +12,7 @@ import (
 
 	"github.com/gethomeport/homeport/internal/auth"
 	"github.com/gethomeport/homeport/internal/terminal"
+	"github.com/gethomeport/homeport/internal/version"
 )
 
 var upgrader = websocket.Upgrader{
@@ -231,6 +232,14 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         .logo-box { width: 36px; height: 36px; border-radius: 12px; overflow: hidden; }
         .logo-box img { width: 100%%; height: 100%%; object-fit: cover; }
 
+        .brand-link { display: flex; flex-direction: column; text-decoration: none; }
+        .brand-name { font-size: 16px; font-weight: 600; line-height: 1.2; }
+        body.dark .brand-name { color: #ffffff; }
+        body.light .brand-name { color: #111827; }
+        .brand-version { font-size: 12px; font-family: monospace; }
+        body.dark .brand-version { color: #6b7280; }
+        body.light .brand-version { color: #9ca3af; }
+
         .nav-breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 14px; }
         body.dark .nav-breadcrumb { color: #9ca3af; }
         body.light .nav-breadcrumb { color: #6b7280; }
@@ -258,10 +267,11 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         body.light .header-btn:hover { background: #f3f4f6; color: #111827; }
         .header-btn svg { width: 18px; height: 18px; }
 
-        .header-btn.text { width: auto; padding: 0 12px; gap: 6px; border: 1px solid; }
+        .header-btn.text { width: auto; padding: 0 12px; gap: 6px; border: 1px solid; text-decoration: none; }
         body.dark .header-btn.text { border-color: #3c3c3c; }
         body.light .header-btn.text { border-color: #e5e7eb; }
         .header-btn.text svg { width: 16px; height: 16px; }
+        a.header-btn { text-decoration: none; }
 
         /* Tab bar */
         .tab-bar {
@@ -346,8 +356,11 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             <a href="/" style="text-decoration: none;">
                 <div class="logo-box"><img src="/favicon.webp" alt="Homeport"></div>
             </a>
+            <a href="/" class="brand-link">
+                <span class="brand-name">Homeport</span>
+                <span class="brand-version">v%s</span>
+            </a>
             <div class="nav-breadcrumb">
-                <a href="/">Dashboard</a>
                 <span class="sep">/</span>
                 <span class="current">%s</span>
                 <span class="sep">/</span>
@@ -602,7 +615,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         }
     </script>
 </body>
-</html>`, repo.Name, repo.Name, repo.Name, repoID)
+</html>`, repo.Name, version.Version, repo.Name, repo.Name, repoID)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(page))
