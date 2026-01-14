@@ -69,11 +69,11 @@ main() {
         echo "  - Cloudflare tunnel"
         echo "  - CLI command (/usr/local/bin/homeport)"
         echo "  - All config (~/.cloudflared, ~/.homeport, .env)"
+        echo "  - Source code directory ($HOMEPORT_DIR)"
         echo ""
         echo -e "${YELLOW}What will NOT be removed:${NC}"
         echo "  - Docker, GitHub CLI, cloudflared packages"
         echo "  - Go runtime"
-        echo "  - Source code directory"
         if [ -n "$SAVED_DOMAIN" ]; then
             echo ""
             echo -e "${YELLOW}NOTE:${NC} DNS record for ${BOLD}$SAVED_DOMAIN${NC} may need manual deletion"
@@ -102,7 +102,7 @@ main() {
         docker compose down >/dev/null 2>&1 || true
         cd /tmp 2>/dev/null || cd ~
     fi
-    docker stop homeportd code-server caddy code-server-init >/dev/null 2>&1 || true
+    docker stop homeportd code-server caddy code-server-init homeportd-init >/dev/null 2>&1 || true
 
     echo "Stopping systemd services..."
     sudo systemctl stop homeport.service >/dev/null 2>&1 || true
@@ -146,15 +146,15 @@ main() {
 
     if docker info >/dev/null 2>&1; then
         echo "Removing containers..."
-        docker rm -f homeportd code-server caddy code-server-init >/dev/null 2>&1 || true
+        docker rm -f homeportd code-server caddy code-server-init homeportd-init >/dev/null 2>&1 || true
 
         echo "Removing networks..."
         docker network rm docker_default homeport_default >/dev/null 2>&1 || true
 
         if [ "$REMOVE_VOLUMES" = true ]; then
             echo "Removing volumes..."
-            docker volume rm docker_homeport-data docker_repos docker_code-server-data docker_code-server-config docker_caddy-data docker_caddy-config >/dev/null 2>&1 || true
-            docker volume rm homeport-data repos code-server-data code-server-config caddy-data caddy-config >/dev/null 2>&1 || true
+            docker volume rm docker_homeport-data docker_repos docker_code-server-data docker_code-server-config docker_caddy-data docker_caddy-config docker_gh-config docker_claude-config docker_claude-config-homeport >/dev/null 2>&1 || true
+            docker volume rm homeport-data repos code-server-data code-server-config caddy-data caddy-config gh-config claude-config claude-config-homeport >/dev/null 2>&1 || true
             echo -e "${GREEN}[*]${NC} Volumes removed"
         else
             echo -e "${YELLOW}[!]${NC} Volumes preserved"
@@ -207,6 +207,18 @@ main() {
     echo -e "${GREEN}[*]${NC} CLI removed"
 
     echo ""
+    echo -e "${BLUE}[Step 5.5/7]${NC} Removing source code directory"
+    echo "============================================="
+
+    if [ -d "$HOMEPORT_DIR" ]; then
+        echo "Removing $HOMEPORT_DIR..."
+        rm -rf "$HOMEPORT_DIR"
+        echo -e "${GREEN}[*]${NC} Source directory removed"
+    else
+        echo -e "${DIM}Directory already removed${NC}"
+    fi
+
+    echo ""
     echo -e "${BLUE}[Step 6/7]${NC} Final verification"
     echo "============================================="
 
@@ -244,8 +256,7 @@ main() {
     fi
 
     echo ""
-    echo "Remaining cleanup (optional):"
-    echo "  rm -rf $HOMEPORT_DIR"
+    echo "Remaining cleanup (optional - these may be used by other tools):"
     echo "  sudo apt remove cloudflared"
     echo "  sudo rm -rf /usr/local/go"
 
