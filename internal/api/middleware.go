@@ -134,7 +134,7 @@ func (s *Server) handlePasswordAuth(w http.ResponseWriter, r *http.Request, port
 			share.ClearRateLimit(clientIP)
 
 			// Set auth cookie (valid for 24 hours)
-			share.SetAuthCookie(w, port, 24*time.Hour)
+			share.SetAuthCookie(w, r, port, 24*time.Hour)
 
 			// Redirect to the port root
 			http.Redirect(w, r, "/"+strconv.Itoa(port)+"/", http.StatusSeeOther)

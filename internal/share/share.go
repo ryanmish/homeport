@@ -87,9 +87,12 @@ func HashPassword(password string) (string, error) {
 }
 
 // SetAuthCookie sets a signed cookie for the given port
-func SetAuthCookie(w http.ResponseWriter, port int, duration time.Duration) {
+func SetAuthCookie(w http.ResponseWriter, r *http.Request, port int, duration time.Duration) {
 	expires := time.Now().Add(duration)
 	value := signCookieValue(port, expires)
+
+	// Determine if we should use Secure flag (behind HTTPS)
+	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     fmt.Sprintf("homeport_auth_%d", port),
@@ -97,6 +100,7 @@ func SetAuthCookie(w http.ResponseWriter, port int, duration time.Duration) {
 		Path:     "/", // Must be root for referer-based asset requests
 		Expires:  expires,
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
