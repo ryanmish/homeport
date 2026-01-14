@@ -135,15 +135,6 @@ func (s *Server) setupRouter() {
 			r.Post("/auth/change-password", s.handleChangePassword)
 		})
 
-		// Serve VS Code share component files
-		r.Get("/vscode/*", func(w http.ResponseWriter, r *http.Request) {
-			if s.cfg.UIDir != "" {
-				http.StripPrefix("/vscode/", http.FileServer(http.Dir(s.cfg.UIDir+"/vscode"))).ServeHTTP(w, r)
-				return
-			}
-			http.NotFound(w, r)
-		})
-
 		// Code Server proxy at /code/*
 		r.Route("/code", func(r chi.Router) {
 			r.HandleFunc("/*", s.handleCodeServerProxy)
@@ -446,14 +437,14 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         }
 
         .start-server-btn {
-            display: flex;
-            padding: 10px 16px;
+            height: 36px;
+            padding: 0 12px;
             font-size: 14px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-radius: 6px;
         }
 
         .start-server-btn:hover {
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            background: #1e293b;
         }
 
         .server-running-controls {
