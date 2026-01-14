@@ -305,12 +305,9 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VS Code - Homeport</title>
     <link rel="icon" type="image/webp" href="/favicon.webp">
-    <script>window.process = { env: { NODE_ENV: 'production' } };</script>
-    <link rel="stylesheet" href="/vscode/vscode-share.css">
-    <script src="/vscode/vscode-share.js" defer></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { height: 100%%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        html, body { margin: 0; padding: 0; box-sizing: border-box; height: 100%%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        iframe { margin: 0; padding: 0; box-sizing: border-box; }
 
         .homeport-header {
             height: 56px;
@@ -1197,6 +1194,7 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
         }
 
         let shareMenuOpen = false;
+        let selectedMode = 'private';
 
         function showShareModal() {
             if (!activePort) return;
@@ -1207,46 +1205,89 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
             }
 
             shareMenuOpen = true;
+            selectedMode = activePort.share_mode || 'private';
 
-            window.renderShareMenu(
-                'shareMenuContainer',
-                { port: activePort.port, share_mode: activePort.share_mode },
-                'light',
-                async (mode, password) => {
-                    // onShare callback
-                    try {
-                        const body = { mode };
-                        if (mode === 'password' && password) {
-                            body.password = password;
-                        }
-                        await fetch('/api/share/' + activePort.port, {
-                            method: 'POST',
-                            credentials: 'include',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body)
-                        });
-                        closeShareMenu();
-                        // Refresh ports to show new mode
-                        checkPorts();
-                    } catch (e) {
-                        console.error('Failed to update share mode:', e);
-                    }
-                },
-                () => {
-                    // onClose callback
-                    closeShareMenu();
-                },
-                () => {
-                    // onCopyUrl callback
-                    const url = EXTERNAL_URL + '/' + activePort.port + '/';
-                    navigator.clipboard.writeText(url);
-                }
-            );
+            // Load saved password
+            const savedPassword = localStorage.getItem('homeport_share_pw_' + activePort.port) || '';
+
+            const container = document.getElementById('shareMenuContainer');
+            container.innerHTML = ` + "`" + `
+                <div class="share-dropdown-content" style="position: absolute; right: 0; top: 100%%; margin-top: 4px;">
+                    <div class="share-title">Share Settings</div>
+                    <div class="share-options">
+                        <div class="share-option ${selectedMode === 'private' ? 'active' : ''}" data-mode="private" onclick="selectShareMode('private')">
+                            <div class="share-option-title">Private</div>
+                            <div class="share-option-desc">Only accessible when logged into Homeport</div>
+                        </div>
+                        <div class="share-option ${selectedMode === 'password' ? 'active' : ''}" data-mode="password" onclick="selectShareMode('password')">
+                            <div class="share-option-title">Password</div>
+                            <div class="share-option-desc">Anyone with the password can access</div>
+                        </div>
+                        <div id="passwordField" class="share-password-field" style="display: ${selectedMode === 'password' ? 'block' : 'none'}">
+                            <div class="password-input-wrapper">
+                                <input type="text" id="sharePassword" placeholder="Enter password..." value="${savedPassword}">
+                            </div>
+                        </div>
+                        <div class="share-option ${selectedMode === 'public' ? 'active' : ''}" data-mode="public" onclick="selectShareMode('public')">
+                            <div class="share-option-title">Public</div>
+                            <div class="share-option-desc">Anyone with the link can access</div>
+                        </div>
+                    </div>
+                    <div class="share-actions">
+                        <button class="share-action-btn cancel" onclick="closeShareMenu()">Cancel</button>
+                        <button class="share-action-btn copy" onclick="applyShare(true)">Apply & Copy URL</button>
+                        <button class="share-action-btn apply" onclick="applyShare(false)">Apply</button>
+                    </div>
+                </div>
+            ` + "`" + `;
 
             // Close on outside click
             setTimeout(() => {
                 document.addEventListener('click', handleShareOutsideClick);
             }, 0);
+        }
+
+        function selectShareMode(mode) {
+            selectedMode = mode;
+            // Update UI
+            document.querySelectorAll('.share-option').forEach(el => {
+                el.classList.toggle('active', el.dataset.mode === mode);
+            });
+            document.getElementById('passwordField').style.display = mode === 'password' ? 'block' : 'none';
+        }
+
+        async function applyShare(shouldCopy) {
+            const password = document.getElementById('sharePassword')?.value || '';
+
+            // Save password to localStorage
+            if (selectedMode === 'password' && password) {
+                localStorage.setItem('homeport_share_pw_' + activePort.port, password);
+            } else {
+                localStorage.removeItem('homeport_share_pw_' + activePort.port);
+            }
+
+            try {
+                const body = { mode: selectedMode };
+                if (selectedMode === 'password' && password) {
+                    body.password = password;
+                }
+                await fetch('/api/share/' + activePort.port, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (shouldCopy) {
+                    const url = EXTERNAL_URL + '/' + activePort.port + '/';
+                    navigator.clipboard.writeText(url);
+                }
+
+                closeShareMenu();
+                checkPorts();
+            } catch (e) {
+                console.error('Failed to update share mode:', e);
+            }
         }
 
         function handleShareOutsideClick(e) {
@@ -1258,7 +1299,8 @@ func (s *Server) serveCodeServerWrapper(w http.ResponseWriter, r *http.Request) 
 
         function closeShareMenu() {
             shareMenuOpen = false;
-            window.unmountShareMenu('shareMenuContainer');
+            const container = document.getElementById('shareMenuContainer');
+            if (container) container.innerHTML = '';
             document.removeEventListener('click', handleShareOutsideClick);
         }
 
