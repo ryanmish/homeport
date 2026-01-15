@@ -240,8 +240,8 @@ export const api = {
       body: JSON.stringify({ command }),
     }),
 
-  checkForUpdates: () =>
-    fetchJSON<UpdateInfo>('/updates'),
+  checkForUpdates: (force = false) =>
+    fetchJSON<UpdateInfo>(`/updates${force ? '?force=true' : ''}`),
 
   // Upgrade
   startUpgrade: (version = 'latest') =>

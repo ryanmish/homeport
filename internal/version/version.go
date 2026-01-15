@@ -99,14 +99,17 @@ func compareVersions(v1, v2 string) int {
 }
 
 // CheckForUpdates checks GitHub for newer releases
-func CheckForUpdates(repoOwner, repoName string) *UpdateInfo {
-	// Check cache (valid for 1 hour)
-	cacheMu.RLock()
-	if cachedUpdate != nil && time.Since(cacheTime) < time.Hour {
+// If forceRefresh is true, bypasses the cache
+func CheckForUpdates(repoOwner, repoName string, forceRefresh bool) *UpdateInfo {
+	// Check cache (valid for 1 hour) unless force refresh
+	if !forceRefresh {
+		cacheMu.RLock()
+		if cachedUpdate != nil && time.Since(cacheTime) < time.Hour {
+			cacheMu.RUnlock()
+			return cachedUpdate
+		}
 		cacheMu.RUnlock()
-		return cachedUpdate
 	}
-	cacheMu.RUnlock()
 
 	info := &UpdateInfo{
 		CurrentVersion: GetVersion(),

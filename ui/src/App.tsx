@@ -820,6 +820,10 @@ function App() {
             updateInfo={updateInfo}
             onClose={() => setShowSettingsModal(false)}
             onToggleTheme={toggleTheme}
+            onCheckForUpdates={async () => {
+              const info = await api.checkForUpdates(true)
+              setUpdateInfo(info)
+            }}
           />
         )}
 
@@ -1929,12 +1933,14 @@ function SettingsModal({
   updateInfo,
   onClose,
   onToggleTheme,
+  onCheckForUpdates,
 }: {
   theme: Theme
   status: Status | null
   updateInfo: UpdateInfo | null
   onClose: () => void
   onToggleTheme: () => void
+  onCheckForUpdates: () => Promise<void>
 }) {
   const [githubStatus, setGithubStatus] = useState<{
     authenticated: boolean
@@ -1949,12 +1955,22 @@ function SettingsModal({
   const [changingPassword, setChangingPassword] = useState(false)
   const [upgradeStatus, setUpgradeStatus] = useState<UpgradeStatus | null>(null)
   const [upgrading, setUpgrading] = useState(false)
+  const [checkingUpdates, setCheckingUpdates] = useState(false)
 
   useEffect(() => {
     api.getGitHubStatus()
       .then(setGithubStatus)
       .finally(() => setLoading(false))
   }, [])
+
+  const handleCheckForUpdates = async () => {
+    setCheckingUpdates(true)
+    try {
+      await onCheckForUpdates()
+    } finally {
+      setCheckingUpdates(false)
+    }
+  }
 
   const handleConnectGitHub = () => {
     // Open system terminal with gh auth login command
@@ -2199,9 +2215,19 @@ function SettingsModal({
 
             {/* Updates */}
             <div>
-              <label className={`text-xs font-medium uppercase tracking-wide ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                Updates
-              </label>
+              <div className="flex items-center justify-between">
+                <label className={`text-xs font-medium uppercase tracking-wide ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Updates
+                </label>
+                <button
+                  onClick={handleCheckForUpdates}
+                  disabled={checkingUpdates}
+                  className={`p-1 rounded transition-colors ${theme === 'dark' ? 'text-gray-500 hover:text-gray-300 hover:bg-gray-800' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                  title="Check for updates"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdates ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
               <div className={`mt-2 divide-y rounded-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-800/50 divide-gray-700/50' : 'bg-gray-50 divide-gray-100'}`}>
                 {updateInfo?.update_available ? (
                   <>

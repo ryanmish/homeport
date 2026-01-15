@@ -761,7 +761,8 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCheckUpdates(w http.ResponseWriter, r *http.Request) {
-	info := version.CheckForUpdates("ryanmish", "homeport")
+	forceRefresh := r.URL.Query().Get("force") == "true"
+	info := version.CheckForUpdates("ryanmish", "homeport", forceRefresh)
 	jsonResponse(w, http.StatusOK, info)
 }
 
