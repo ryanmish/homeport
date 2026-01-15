@@ -479,7 +479,7 @@ CFGEOF
         echo "HOMEPORT_VERSION=${HOMEPORT_VERSION:-latest}"
     } > "$HOMEPORT_DIR/docker/.env"
 
-    echo "Pulling Docker images..."
+    echo "Building Docker images..."
     cd "$HOMEPORT_DIR/docker"
 
     # Determine docker compose command
@@ -501,20 +501,13 @@ CFGEOF
         fi
     }
 
-    # Try to pull pre-built images first (much faster ~30s vs ~5min build)
-    echo "Attempting to pull pre-built images from GitHub Container Registry..."
-    if run_docker $COMPOSE pull 2>/dev/null; then
-        echo -e "${GREEN}[*]${NC} Docker images pulled"
-    else
-        # Fall back to building from source if pull fails (e.g., no release yet)
-        echo -e "${YELLOW}[!]${NC} Pre-built images not available, building from source..."
-        echo "    (This may take a few minutes)"
-        if ! run_docker $COMPOSE build; then
-            echo -e "${RED}Docker build failed.${NC}"
-            exit 1
-        fi
-        echo -e "${GREEN}[*]${NC} Docker images built"
+    # Build from source (takes ~3-5 minutes)
+    echo "Building from source (this may take a few minutes)..."
+    if ! run_docker $COMPOSE build; then
+        echo -e "${RED}Docker build failed.${NC}"
+        exit 1
     fi
+    echo -e "${GREEN}[*]${NC} Docker images built"
 
     echo "Starting services..."
     if ! run_docker $COMPOSE up -d; then

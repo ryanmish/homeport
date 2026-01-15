@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Homeport Self-Upgrade Script
-# Runs as a detached process to pull new images and restart containers.
+# Runs as a detached process to build from source and restart containers.
 # Status is written to a JSON file for the frontend to poll.
 #
 
@@ -9,13 +9,12 @@ set -e
 
 # Configuration
 VERSION="${1:-latest}"
-IMAGE="ghcr.io/ryanmish/homeport:$VERSION"
 # When running inside container, compose dir is mounted at /homeport-compose
 # When running on host, it's the current directory or specified via env
 COMPOSE_DIR="${COMPOSE_DIR:-/homeport-compose}"
+REPO_DIR="${REPO_DIR:-/homeport-repo}"
 
 # Docker API compatibility - Alpine's docker-cli may be older than host's dockerd
-# Set to minimum required version for compatibility
 export DOCKER_API_VERSION=1.44
 
 # Compose project name must match the original install (from ~/homeport/docker)
@@ -71,49 +70,55 @@ if [ "$FREE_SPACE" -lt 1 ]; then
 fi
 echo "Disk space check passed: ${FREE_SPACE}GB available" >> "$LOG_FILE"
 
-# Pull new image with retry logic
+# Fetch latest code from GitHub
 write_status "pulling" "Downloading update..." false false
-echo "Pulling image: $IMAGE" >> "$LOG_FILE"
+echo "Fetching version: $VERSION" >> "$LOG_FILE"
+cd "$REPO_DIR"
 for i in $(seq 1 $MAX_RETRIES); do
-    if docker pull "$IMAGE" >> "$LOG_FILE" 2>&1; then
-        echo "Pull successful on attempt $i" >> "$LOG_FILE"
+    if git fetch --tags >> "$LOG_FILE" 2>&1; then
+        echo "Fetch successful on attempt $i" >> "$LOG_FILE"
         break
     fi
     if [ $i -eq $MAX_RETRIES ]; then
-        write_status "error" "Failed to download update after $MAX_RETRIES attempts" true false
-        echo "ERROR: Pull failed after $MAX_RETRIES attempts" >> "$LOG_FILE"
+        write_status "error" "Failed to fetch updates after $MAX_RETRIES attempts" true false
+        echo "ERROR: Fetch failed after $MAX_RETRIES attempts" >> "$LOG_FILE"
         exit 1
     fi
-    echo "Pull attempt $i failed, retrying in 5s..." >> "$LOG_FILE"
+    echo "Fetch attempt $i failed, retrying in 5s..." >> "$LOG_FILE"
     sleep 5
 done
+
+# Checkout the requested version
+if [ "$VERSION" = "latest" ]; then
+    # Get the latest tag
+    VERSION=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "main")
+    echo "Latest version is: $VERSION" >> "$LOG_FILE"
+fi
+echo "Checking out $VERSION..." >> "$LOG_FILE"
+git checkout "$VERSION" >> "$LOG_FILE" 2>&1
 
 # Tag current image for rollback (best effort)
 echo "Tagging current image for rollback..." >> "$LOG_FILE"
 CURRENT_IMAGE=$(docker compose -f "$COMPOSE_DIR/docker-compose.yml" images homeportd -q 2>/dev/null | head -1 || true)
 if [ -n "$CURRENT_IMAGE" ]; then
-    docker tag "$CURRENT_IMAGE" "ghcr.io/ryanmish/homeport:rollback" 2>/dev/null || true
+    docker tag "$CURRENT_IMAGE" "homeport:rollback" 2>/dev/null || true
     echo "Tagged $CURRENT_IMAGE as rollback" >> "$LOG_FILE"
 fi
 
-# Update .env file with new version (persists across reboots)
-write_status "restarting" "Restarting services..." false false
-echo "Updating HOMEPORT_VERSION in .env to $VERSION" >> "$LOG_FILE"
+# Build from source
+write_status "building" "Building update..." false false
+echo "Building from source..." >> "$LOG_FILE"
 cd "$COMPOSE_DIR"
-if [ -f ".env" ]; then
-    # Replace existing HOMEPORT_VERSION line or add it if missing
-    if grep -q "^HOMEPORT_VERSION=" .env; then
-        sed -i "s/^HOMEPORT_VERSION=.*/HOMEPORT_VERSION=$VERSION/" .env
-    else
-        echo "HOMEPORT_VERSION=$VERSION" >> .env
-    fi
-else
-    echo "HOMEPORT_VERSION=$VERSION" > .env
+if ! docker compose build --build-arg VERSION="$VERSION" >> "$LOG_FILE" 2>&1; then
+    write_status "error" "Failed to build update" true false
+    echo "ERROR: Build failed" >> "$LOG_FILE"
+    exit 1
 fi
+echo "Build complete" >> "$LOG_FILE"
 
-# Restart with new image
-echo "Restarting with HOMEPORT_VERSION=$VERSION" >> "$LOG_FILE"
-export HOMEPORT_VERSION="$VERSION"
+# Restart with new build
+write_status "restarting" "Restarting services..." false false
+echo "Restarting services..." >> "$LOG_FILE"
 docker compose up -d >> "$LOG_FILE" 2>&1
 
 # Health check (wait up to 30s for new container to be healthy)
@@ -129,9 +134,9 @@ for i in $(seq 1 30); do
         # Remove dangling images
         docker image prune -f >> "$LOG_FILE" 2>&1 || true
         # Remove old homeport images except current and rollback
-        docker images "ghcr.io/ryanmish/homeport" --format "{{.Tag}}" 2>/dev/null | \
+        docker images "homeport" --format "{{.Tag}}" 2>/dev/null | \
             grep -v -E "^($VERSION|rollback|latest)$" | \
-            xargs -I {} docker rmi "ghcr.io/ryanmish/homeport:{}" >> "$LOG_FILE" 2>&1 || true
+            xargs -I {} docker rmi "homeport:{}" >> "$LOG_FILE" 2>&1 || true
         echo "Cleanup complete" >> "$LOG_FILE"
 
         echo "=== Upgrade completed successfully at $(date) ===" >> "$LOG_FILE"
@@ -146,7 +151,7 @@ echo "Attempting automatic rollback..." >> "$LOG_FILE"
 write_status "rolling_back" "Upgrade failed, rolling back..." false false
 
 # Check if rollback image exists
-if docker image inspect "ghcr.io/ryanmish/homeport:rollback" > /dev/null 2>&1; then
+if docker image inspect "homeport:rollback" > /dev/null 2>&1; then
     # Restore previous version in .env
     if grep -q "^HOMEPORT_VERSION=" .env; then
         sed -i "s/^HOMEPORT_VERSION=.*/HOMEPORT_VERSION=rollback/" .env

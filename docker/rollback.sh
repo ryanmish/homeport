@@ -52,7 +52,7 @@ echo "Started at: $(date)" >> "$LOG_FILE"
 
 # Check if rollback image exists
 write_status "checking" "Checking for rollback image..." false false
-if ! docker image inspect "ghcr.io/ryanmish/homeport:rollback" > /dev/null 2>&1; then
+if ! docker image inspect "homeport:rollback" > /dev/null 2>&1; then
     write_status "error" "No rollback image available. Cannot roll back." true false
     echo "ERROR: No rollback image found" >> "$LOG_FILE"
     exit 1

@@ -171,7 +171,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	resp := StatusResponse{
 		Status:  "ok",
-		Version: "0.1.0",
+		Version: version.GetVersion(),
 		Uptime:  time.Since(startTime).Round(time.Second).String(),
 		Stats:   sysStats,
 		Config: StatusConfig{

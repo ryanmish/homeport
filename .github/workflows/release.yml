@@ -4,55 +4,23 @@ on:
   release:
     types: [published]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
-  build-and-push:
+  # Just verify the build works - users build from source on their machines
+  verify-build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - uses: actions/checkout@v4
 
-      # Set up QEMU for multi-arch builds
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      # Set up Docker Buildx for multi-platform builds
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest
-
-      - name: Build and push
+      - name: Verify Docker build
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/Dockerfile
-          push: true
-          # Build for both AMD64 (most servers) and ARM64 (Raspberry Pi, AWS Graviton, Apple Silicon)
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: false
+          platforms: linux/amd64
           build-args: |
             VERSION=${{ github.ref_name }}
-          # Don't use cache - VERSION changes need full rebuild to inject into binary
-          no-cache: true
