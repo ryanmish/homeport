@@ -1374,7 +1374,7 @@ function RepoCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-3">
+      <CardContent className="py-3">
         {ports.length > 0 ? (
           <div className="space-y-2">
             {ports.map((port) => (
@@ -1393,7 +1393,7 @@ function RepoCard({
             ))}
           </div>
         ) : (
-          <div className={`flex items-center justify-between py-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+          <div className={`flex items-center justify-between ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
             <p className="text-sm">
               {processLoadingState === 'starting' ? 'Starting server...' : repo.start_command ? 'No dev servers running' : 'No start command configured'}
             </p>
@@ -1401,7 +1401,7 @@ function RepoCard({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs"
+                className="h-7"
                 onClick={onStartProcess}
                 disabled={!!processLoadingState}
               >
@@ -1413,7 +1413,7 @@ function RepoCard({
                 {processLoadingState === 'starting' ? 'Starting...' : 'Start Server'}
               </Button>
             ) : (
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onConfigureStart}>
+              <Button variant="ghost" size="sm" className="h-7" onClick={onConfigureStart}>
                 <Pencil className="h-3 w-3 mr-1" />
                 Configure
               </Button>
