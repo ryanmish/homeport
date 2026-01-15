@@ -1,6 +1,9 @@
 # Build stage
 FROM golang:1.22-alpine AS builder
 
+# Version is injected at build time (via GitHub Actions or docker build --build-arg)
+ARG VERSION=dev
+
 WORKDIR /build
 
 # Install git for go mod download
@@ -13,9 +16,13 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build daemon and CLI
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o homeportd ./cmd/homeportd
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o homeport ./cmd/homeport
+# Build daemon and CLI with version injected
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w -X github.com/gethomeport/homeport/internal/version.Version=${VERSION}" \
+    -o homeportd ./cmd/homeportd
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w -X github.com/gethomeport/homeport/internal/version.Version=${VERSION}" \
+    -o homeport ./cmd/homeport
 
 # Build UI
 FROM node:20-alpine AS ui-builder

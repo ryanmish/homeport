@@ -96,6 +96,14 @@ export interface UpdateInfo {
   error?: string
 }
 
+export interface UpgradeStatus {
+  step: 'idle' | 'checking' | 'pulling' | 'restarting' | 'verifying' | 'complete' | 'error'
+  message: string
+  error: boolean
+  completed: boolean
+  version?: string
+}
+
 export interface ExecResult {
   success: boolean
   command: string
@@ -234,6 +242,16 @@ export const api = {
 
   checkForUpdates: () =>
     fetchJSON<UpdateInfo>('/updates'),
+
+  // Upgrade
+  startUpgrade: (version = 'latest') =>
+    fetchJSON<{ status: string; version: string }>('/upgrade', {
+      method: 'POST',
+      body: JSON.stringify({ version }),
+    }),
+
+  getUpgradeStatus: () =>
+    fetchJSON<UpgradeStatus>('/upgrade/status'),
 
   // Process management
   getProcesses: () =>

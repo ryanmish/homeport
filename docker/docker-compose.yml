@@ -2,6 +2,7 @@ services:
   # Homeport Daemon
   # Uses network_mode: host to access localhost ports (Linux only)
   homeportd:
+    image: ghcr.io/ryanmish/homeport:${HOMEPORT_VERSION:-latest}
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -19,6 +20,8 @@ services:
       # Claude Code config (persistent volume + instructions file)
       - claude-config-homeport:/home/homeport/.claude
       - ./CLAUDE.md:/home/homeport/.claude/CLAUDE.md:ro
+      # Docker socket for self-upgrade capability
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - HOMEPORT_EXTERNAL_URL=${EXTERNAL_URL:-http://localhost}
       - HOMEPORT_COOKIE_SECRET=${COOKIE_SECRET:-}

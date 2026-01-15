@@ -20,6 +20,7 @@ type UpdateInfo struct {
 	LatestVersion   string `json:"latest_version,omitempty"`
 	UpdateAvailable bool   `json:"update_available"`
 	ReleaseURL      string `json:"release_url,omitempty"`
+	ReleaseNotes    string `json:"release_notes,omitempty"`
 	CheckedAt       string `json:"checked_at,omitempty"`
 	Error           string `json:"error,omitempty"`
 }
@@ -73,6 +74,7 @@ func CheckForUpdates(repoOwner, repoName string) *UpdateInfo {
 	var release struct {
 		TagName string `json:"tag_name"`
 		HTMLURL string `json:"html_url"`
+		Body    string `json:"body"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		info.Error = "Failed to parse release info"
@@ -87,6 +89,7 @@ func CheckForUpdates(repoOwner, repoName string) *UpdateInfo {
 
 	info.LatestVersion = latestVersion
 	info.ReleaseURL = release.HTMLURL
+	info.ReleaseNotes = release.Body
 	info.UpdateAvailable = latestVersion != Version
 
 	// Cache the result

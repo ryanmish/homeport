@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ShareMenu } from '@/components/ShareMenu'
 import { Button } from '@/components/ui/button'
 import { Toaster, toast } from '@/components/ui/sonner'
-import { api, type Repo, type Port, type Status, type GitHubRepo, type GitStatus, type RepoInfo, type BranchInfo, type UpdateInfo, type Process, type LogEntry, type ActivityEntry } from '@/lib/api'
+import { api, type Repo, type Port, type Status, type GitHubRepo, type GitStatus, type RepoInfo, type BranchInfo, type UpdateInfo, type UpgradeStatus, type Process, type LogEntry, type ActivityEntry } from '@/lib/api'
 import {
   ExternalLink,
   Copy,
@@ -593,10 +593,13 @@ function App() {
                 </button>
                 <button
                   onClick={() => setShowSettingsModal(true)}
-                  className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
-                  title="Settings"
+                  className={`relative p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                  title={updateInfo?.update_available ? `Update available: v${updateInfo.latest_version}` : 'Settings'}
                 >
                   <Settings className="h-4 w-4" />
+                  {updateInfo?.update_available && (
+                    <span className="absolute top-1 right-1 h-2 w-2 bg-blue-500 rounded-full" />
+                  )}
                 </button>
               </div>
 
@@ -810,6 +813,7 @@ function App() {
           <SettingsModal
             theme={theme}
             status={status}
+            updateInfo={updateInfo}
             onClose={() => setShowSettingsModal(false)}
             onToggleTheme={toggleTheme}
           />
@@ -1918,11 +1922,13 @@ function HelpModal({ theme, onClose }: { theme: Theme; onClose: () => void }) {
 function SettingsModal({
   theme,
   status,
+  updateInfo,
   onClose,
   onToggleTheme,
 }: {
   theme: Theme
   status: Status | null
+  updateInfo: UpdateInfo | null
   onClose: () => void
   onToggleTheme: () => void
 }) {
@@ -1937,6 +1943,8 @@ function SettingsModal({
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
+  const [upgradeStatus, setUpgradeStatus] = useState<UpgradeStatus | null>(null)
+  const [upgrading, setUpgrading] = useState(false)
 
   useEffect(() => {
     api.getGitHubStatus()
@@ -1984,6 +1992,37 @@ function SettingsModal({
 
   const handleLogout = () => {
     window.location.href = '/logout'
+  }
+
+  const handleStartUpgrade = async () => {
+    if (!updateInfo?.latest_version) return
+    setUpgrading(true)
+    try {
+      await api.startUpgrade(updateInfo.latest_version)
+      // Start polling for status
+      const pollStatus = async () => {
+        try {
+          const status = await api.getUpgradeStatus()
+          setUpgradeStatus(status)
+          if (status.completed) {
+            // Upgrade complete, reload page after delay
+            setTimeout(() => window.location.reload(), 2000)
+          } else if (status.error) {
+            setUpgrading(false)
+          } else {
+            // Continue polling
+            setTimeout(pollStatus, 1000)
+          }
+        } catch {
+          // Server might be restarting, keep polling
+          setTimeout(pollStatus, 2000)
+        }
+      }
+      setTimeout(pollStatus, 1000)
+    } catch (err) {
+      toast.error('Failed to start upgrade')
+      setUpgrading(false)
+    }
   }
 
   return (
@@ -2137,6 +2176,88 @@ function SettingsModal({
                       >
                         {changingPassword ? 'Saving...' : 'Save'}
                       </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Updates */}
+            <div>
+              <label className={`text-xs font-medium uppercase tracking-wide ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                Updates
+              </label>
+              <div className={`mt-2 divide-y rounded-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-800/50 divide-gray-700/50' : 'bg-gray-50 divide-gray-100'}`}>
+                {updateInfo?.update_available ? (
+                  <>
+                    <div className="p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
+                            v{updateInfo.current_version}
+                          </span>
+                          <ArrowUp className={`h-3 w-3 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-500'}`} />
+                          <span className={`text-sm font-medium ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>
+                            v{updateInfo.latest_version}
+                          </span>
+                        </div>
+                        {!upgrading && !upgradeStatus?.completed && (
+                          <button
+                            onClick={handleStartUpgrade}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                          >
+                            Upgrade
+                          </button>
+                        )}
+                      </div>
+                      {upgrading && upgradeStatus && (
+                        <div className={`mt-2 p-2 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}>
+                          <div className="flex items-center gap-2">
+                            {upgradeStatus.completed ? (
+                              <Check className="h-4 w-4 text-green-500" />
+                            ) : upgradeStatus.error ? (
+                              <X className="h-4 w-4 text-red-500" />
+                            ) : (
+                              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                            )}
+                            <span className={`text-sm ${upgradeStatus.error ? 'text-red-500' : upgradeStatus.completed ? 'text-green-500' : theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                              {upgradeStatus.message}
+                            </span>
+                          </div>
+                          {upgradeStatus.completed && (
+                            <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                              Reloading page...
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {updateInfo.release_notes && !upgrading && (
+                        <div className={`mt-2 p-2 rounded-lg text-xs ${theme === 'dark' ? 'bg-gray-900 text-gray-400' : 'bg-white text-gray-600'}`}>
+                          <p className="font-medium mb-1">What's new:</p>
+                          <p className="whitespace-pre-wrap line-clamp-4">{updateInfo.release_notes}</p>
+                          {updateInfo.release_url && (
+                            <a
+                              href={updateInfo.release_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`inline-flex items-center gap-1 mt-2 ${theme === 'dark' ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
+                            >
+                              View full release notes <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-between p-3">
+                    <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Version</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-mono ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
+                        v{status?.version || updateInfo?.current_version}
+                      </span>
+                      <Check className="h-3 w-3 text-green-500" />
+                      <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>Up to date</span>
                     </div>
                   </div>
                 )}

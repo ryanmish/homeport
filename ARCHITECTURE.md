@@ -429,3 +429,124 @@ docker compose up -d
 2. **Process management**: Let servers die when terminal closes. No supervision needed. Homeport just detects what's running.
 3. **URL structure**: Paths only (dev.domain.com/3000). Simpler setup, one wildcard cert.
 4. **System stats**: Yes, show CPU/RAM/disk on dashboard.
+
+---
+
+## Updates & Releases
+
+Homeport supports one-click self-upgrades from the UI.
+
+### How It Works
+
+**Publishing (maintainer):**
+1. Commit and push changes to GitHub
+2. Create a release: `gh release create v1.2.0 --title "v1.2.0" --notes "What's new"`
+3. GitHub Actions automatically builds and pushes Docker image to `ghcr.io/ryanmish/homeport:v1.2.0`
+
+**Upgrading (user):**
+1. Dashboard checks for updates on page load
+2. Blue notification dot appears on Settings button when update available
+3. Open Settings → Updates section shows version comparison and release notes
+4. Click "Upgrade" → Downloading (~30s) → Restarting (~5s) → Verifying → Done
+5. Page auto-reloads with new version
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  User clicks "Upgrade" in Settings                              │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  POST /api/upgrade                                              │
+│  Backend triggers docker/upgrade.sh                             │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  upgrade.sh (runs detached, survives container restart)         │
+│  1. Pre-flight: Check disk space (need 1GB free)                │
+│  2. docker pull ghcr.io/ryanmish/homeport:v1.2.0 (retry 3x)     │
+│  3. Tag current image as :rollback                              │
+│  4. docker compose up -d (restart with new image)               │
+│  5. Health check: curl /api/status (30s timeout)                │
+│  6. Write status to /srv/homeport/data/upgrade-status.json      │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Frontend polls GET /api/upgrade/status                         │
+│  Shows progress: Downloading → Restarting → Verifying → Done    │
+│  Auto-reloads page on completion                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `.github/workflows/release.yml` | Builds and pushes Docker image on GitHub release |
+| `docker/upgrade.sh` | Upgrade script with retries, health check, rollback tagging |
+| `internal/api/upgrade.go` | API handlers for `/api/upgrade` and `/api/upgrade/status` |
+| `internal/version/version.go` | Version checking against GitHub releases |
+
+### Version Injection
+
+Version is injected at build time via Go ldflags:
+
+```dockerfile
+ARG VERSION=dev
+RUN go build -ldflags="-s -w -X .../version.Version=${VERSION}" -o homeportd
+```
+
+GitHub Actions passes `VERSION=${{ github.ref_name }}` (e.g., `v1.2.0`).
+
+### Resilience
+
+| Scenario | Handling |
+|----------|----------|
+| Network error during pull | Retry up to 3 times with 5s delay |
+| Disk space insufficient | Pre-flight check blocks upgrade |
+| Concurrent upgrade attempts | Lock file prevents race condition |
+| New container crashes | Health check detects, reports error |
+| User closes browser | Upgrade continues, reload shows result |
+
+### Manual Rollback
+
+If an upgrade fails, the previous image is tagged as `:rollback`:
+
+```bash
+docker tag ghcr.io/ryanmish/homeport:rollback ghcr.io/ryanmish/homeport:latest
+cd ~/homeport/docker && docker compose up -d
+```
+
+### API Endpoints
+
+```
+GET  /api/updates         - Check for updates (compares with GitHub releases)
+POST /api/upgrade         - Start upgrade (body: { "version": "v1.2.0" })
+GET  /api/upgrade/status  - Poll upgrade progress
+```
+
+**Update response:**
+```json
+{
+  "current_version": "1.1.0",
+  "latest_version": "1.2.0",
+  "update_available": true,
+  "release_notes": "## What's New\n- Feature X\n- Bug fix Y",
+  "release_url": "https://github.com/ryanmish/homeport/releases/tag/v1.2.0"
+}
+```
+
+**Status response:**
+```json
+{
+  "step": "pulling",
+  "message": "Downloading update...",
+  "error": false,
+  "completed": false,
+  "version": "1.2.0"
+}
+```

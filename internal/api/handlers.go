@@ -761,8 +761,7 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCheckUpdates(w http.ResponseWriter, r *http.Request) {
-	// TODO: Make repo owner/name configurable
-	info := version.CheckForUpdates("gethomeport", "homeport")
+	info := version.CheckForUpdates("ryanmish", "homeport")
 	jsonResponse(w, http.StatusOK, info)
 }
 

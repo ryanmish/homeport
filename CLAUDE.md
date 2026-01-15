@@ -13,14 +13,28 @@ Homeport is a self-hosted remote development environment. See `ARCHITECTURE.md` 
 
 ## Deployment
 
-### Deploy changes to server
+### Option 1: Direct deploy (dev/testing)
 ```bash
 # 1. Commit and push
 git add -A && git commit -m "Your message" && git push
 
-# 2. Deploy on server (run this one command)
+# 2. Deploy on server (builds from source)
 ssh ryan@devbox "cd ~/homeport/docker && git -C .. pull && docker compose build && docker compose up -d"
 ```
+
+### Option 2: Release (production)
+```bash
+# 1. Commit and push
+git add -A && git commit -m "Your message" && git push
+
+# 2. Create a GitHub release (triggers Docker image build)
+gh release create v1.2.0 --title "v1.2.0" --notes "What's new in this release"
+
+# 3. Users can now upgrade via Settings → Updates in the UI
+```
+
+GitHub Actions automatically builds and pushes the Docker image to `ghcr.io/ryanmish/homeport:v1.2.0`.
+Users see a notification dot on Settings when an update is available and can one-click upgrade.
 
 ### Quick deploy alias (add to ~/.zshrc)
 ```bash

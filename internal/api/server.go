@@ -135,6 +135,10 @@ func (s *Server) setupRouter() {
 			r.Get("/updates", s.handleCheckUpdates)
 			r.Get("/activity", s.handleGetActivity)
 
+			// Upgrade endpoints
+			r.Post("/upgrade", s.handleStartUpgrade)
+			r.Get("/upgrade/status", s.handleUpgradeStatus)
+
 			// Auth management endpoints
 			r.Post("/auth/change-password", s.handleChangePassword)
 
