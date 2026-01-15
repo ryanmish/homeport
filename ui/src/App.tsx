@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, createContext } from 'react'
+import Markdown from 'react-markdown'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ShareMenu } from '@/components/ShareMenu'
 import { Button } from '@/components/ui/button'
@@ -2000,9 +2001,11 @@ function SettingsModal({
   const handleStartUpgrade = async () => {
     if (!updateInfo?.latest_version) return
     setUpgrading(true)
+    // Show immediate feedback before API call
+    setUpgradeStatus({ step: 'starting', message: 'Starting upgrade...', error: false, completed: false, version: updateInfo.latest_version })
     try {
       await api.startUpgrade(updateInfo.latest_version)
-      // Start polling for status
+      // Start polling for status immediately
       const pollStatus = async () => {
         try {
           const status = await api.getUpgradeStatus()
@@ -2021,10 +2024,11 @@ function SettingsModal({
           setTimeout(pollStatus, 2000)
         }
       }
-      setTimeout(pollStatus, 1000)
+      pollStatus() // Start immediately instead of waiting 1s
     } catch (err) {
       toast.error('Failed to start upgrade')
       setUpgrading(false)
+      setUpgradeStatus(null)
     }
   }
 
@@ -2045,7 +2049,15 @@ function SettingsModal({
                 GitHub Account
               </label>
               {loading ? (
-                <div className={`mt-2 h-16 rounded-lg animate-pulse ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'}`} />
+                <div className={`mt-2 rounded-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
+                  <div className="flex items-center gap-3 p-3">
+                    <div className={`w-10 h-10 rounded-full animate-pulse ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                    <div className="flex-1 space-y-2">
+                      <div className={`h-4 w-24 rounded animate-pulse ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                      <div className={`h-3 w-16 rounded animate-pulse ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                    </div>
+                  </div>
+                </div>
               ) : githubStatus?.authenticated && githubStatus.user ? (
                 <div className={`mt-2 rounded-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
                   <a
@@ -2227,6 +2239,22 @@ function SettingsModal({
                               {upgradeStatus.message}
                             </span>
                           </div>
+                          {!upgradeStatus.error && (
+                            <div className={`mt-2 h-1.5 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${upgradeStatus.completed ? 'bg-green-500' : 'bg-blue-500'}`}
+                                style={{
+                                  width: upgradeStatus.completed ? '100%' :
+                                    upgradeStatus.step === 'starting' ? '5%' :
+                                    upgradeStatus.step === 'checking' ? '10%' :
+                                    upgradeStatus.step === 'pulling' ? '25%' :
+                                    upgradeStatus.step === 'building' ? '50%' :
+                                    upgradeStatus.step === 'restarting' ? '75%' :
+                                    upgradeStatus.step === 'verifying' ? '90%' : '15%'
+                                }}
+                              />
+                            </div>
+                          )}
                           {upgradeStatus.completed && (
                             <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                               Reloading page...
@@ -2237,7 +2265,9 @@ function SettingsModal({
                       {updateInfo.release_notes && !upgrading && (
                         <div className={`mt-2 p-2 rounded-lg text-xs ${theme === 'dark' ? 'bg-gray-900 text-gray-400' : 'bg-white text-gray-600'}`}>
                           <p className="font-medium mb-1">What's new:</p>
-                          <p className="whitespace-pre-wrap line-clamp-4">{updateInfo.release_notes}</p>
+                          <div className="prose prose-xs prose-gray dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:my-1 [&_li]:my-0 [&_p]:my-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 line-clamp-6">
+                            <Markdown>{updateInfo.release_notes}</Markdown>
+                          </div>
                           {updateInfo.release_url && (
                             <a
                               href={updateInfo.release_url}
