@@ -97,7 +97,7 @@ export interface UpdateInfo {
 }
 
 export interface UpgradeStatus {
-  step: 'idle' | 'checking' | 'pulling' | 'restarting' | 'verifying' | 'complete' | 'rolling_back' | 'rolled_back' | 'error'
+  step: 'idle' | 'starting' | 'checking' | 'pulling' | 'building' | 'restarting' | 'verifying' | 'complete' | 'rolling_back' | 'rolled_back' | 'error'
   message: string
   error: boolean
   completed: boolean
