@@ -553,15 +553,33 @@ EOF
     sudo systemctl enable homeport.service
     echo -e "${GREEN}[*]${NC} Homeport will start on boot"
 
-    # Start cloudflared tunnel as a systemd service
-    echo "Starting Cloudflare Tunnel..."
-    sudo cloudflared service install 2>/dev/null || true
-    sudo systemctl enable cloudflared 2>/dev/null || true
-    if ! sudo systemctl start cloudflared 2>/dev/null; then
-        # Fallback: run in background with no output
-        nohup cloudflared tunnel run "$TUNNEL_NAME" > /dev/null 2>&1 &
-        disown
-    fi
+    # Set up cloudflared as a systemd service (user service, no sudo needed)
+    echo "Setting up Cloudflare Tunnel service..."
+    mkdir -p ~/.config/systemd/user
+    cat > ~/.config/systemd/user/cloudflared.service << EOF
+[Unit]
+Description=Cloudflare Tunnel for Homeport
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared tunnel --config $HOME/.cloudflared/config.yml run
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+    # Enable lingering so user services start at boot (before login)
+    sudo loginctl enable-linger $USER 2>/dev/null || true
+
+    # Reload and start the service
+    systemctl --user daemon-reload
+    systemctl --user enable cloudflared
+    systemctl --user start cloudflared
+
     echo -e "${GREEN}[*]${NC} Tunnel running (will auto-start on boot)"
 
     # Install CLI

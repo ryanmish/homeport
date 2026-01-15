@@ -70,7 +70,18 @@ func (s *Server) setupRouter() {
 	// Global middleware
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(30 * time.Second))
+	// Timeout middleware - but skip for WebSocket connections (they're long-lived)
+	r.Use(func(next http.Handler) http.Handler {
+		timeout := middleware.Timeout(30 * time.Second)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip timeout for WebSocket upgrade requests
+			if r.Header.Get("Upgrade") == "websocket" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			timeout(next).ServeHTTP(w, r)
+		})
+	})
 	r.Use(corsMiddleware)
 
 	// Public routes (no auth required)
