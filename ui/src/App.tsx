@@ -83,7 +83,9 @@ function App() {
   const [showStartCommandModal, setShowStartCommandModal] = useState<Repo | null>(null)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [repoInfos, setRepoInfos] = useState<Record<string, RepoInfo>>({})
-  const [dismissedUpdate, setDismissedUpdate] = useState(false)
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(() => {
+    return localStorage.getItem('homeport_dismissed_update')
+  })
   const [processes, setProcesses] = useState<Process[]>([])
   const [processLoading, setProcessLoading] = useState<Record<string, 'starting' | 'stopping'>>({})
   const [showLogsModal, setShowLogsModal] = useState<Repo | null>(null)
@@ -509,7 +511,7 @@ function App() {
         <Toaster position="top-right" />
 
         {/* Update notification banner */}
-        {updateInfo?.update_available && !dismissedUpdate && (
+        {updateInfo?.update_available && dismissedUpdateVersion !== updateInfo.latest_version && (
           <div className={`border-b px-4 py-2 flex items-center justify-between ${theme === 'dark' ? 'bg-blue-900/20 border-blue-800/30' : 'bg-blue-50 border-blue-100'}`}>
             <div className="flex items-center gap-2">
               <Download className={`h-4 w-4 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
@@ -518,18 +520,19 @@ function App() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              {updateInfo.release_url && (
-                <a
-                  href={updateInfo.release_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`text-sm font-medium ${theme === 'dark' ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
-                >
-                  View Release
-                </a>
-              )}
               <button
-                onClick={() => setDismissedUpdate(true)}
+                onClick={() => setShowSettingsModal(true)}
+                className={`text-sm font-medium ${theme === 'dark' ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
+              >
+                Update Now
+              </button>
+              <button
+                onClick={() => {
+                  if (updateInfo?.latest_version) {
+                    localStorage.setItem('homeport_dismissed_update', updateInfo.latest_version)
+                    setDismissedUpdateVersion(updateInfo.latest_version)
+                  }
+                }}
                 className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-blue-800/30' : 'hover:bg-blue-100'}`}
               >
                 <X className={`h-4 w-4 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />

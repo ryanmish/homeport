@@ -13,6 +13,19 @@ if [ -d /home/homeport/.config ]; then
     chown homeport:homeport /home/homeport/.config
 fi
 
+# Add homeport user to docker group (for self-upgrade capability)
+# Get the GID of the docker socket and create/modify group to match
+if [ -S /var/run/docker.sock ]; then
+    DOCKER_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || stat -f '%g' /var/run/docker.sock 2>/dev/null)
+    if [ -n "$DOCKER_GID" ]; then
+        # Check if a group with this GID already exists
+        if ! getent group "$DOCKER_GID" > /dev/null 2>&1; then
+            addgroup -g "$DOCKER_GID" docker 2>/dev/null || true
+        fi
+        adduser homeport "$(getent group "$DOCKER_GID" | cut -d: -f1)" 2>/dev/null || true
+    fi
+fi
+
 # Configure git to use gh CLI for GitHub authentication
 su-exec homeport git config --global credential.helper '!gh auth git-credential'
 
