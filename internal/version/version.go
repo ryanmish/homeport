@@ -3,6 +3,8 @@ package version
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -38,6 +40,57 @@ func GetInfo() map[string]string {
 		"git_commit": GitCommit,
 		"build_time": BuildTime,
 	}
+}
+
+// compareVersions compares two semantic versions.
+// Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
+func compareVersions(v1, v2 string) int {
+	// Strip 'v' prefix if present
+	v1 = strings.TrimPrefix(v1, "v")
+	v2 = strings.TrimPrefix(v2, "v")
+
+	// Handle special versions
+	if v1 == v2 {
+		return 0
+	}
+	if v1 == "dev" || v1 == "unknown" {
+		return -1 // dev/unknown is always "older"
+	}
+	if v2 == "dev" || v2 == "unknown" {
+		return 1
+	}
+
+	// Split into parts (major.minor.patch)
+	parts1 := strings.Split(v1, ".")
+	parts2 := strings.Split(v2, ".")
+
+	// Compare each part
+	maxLen := len(parts1)
+	if len(parts2) > maxLen {
+		maxLen = len(parts2)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var n1, n2 int
+		if i < len(parts1) {
+			// Handle pre-release suffixes (e.g., "1-beta")
+			numStr := strings.Split(parts1[i], "-")[0]
+			n1, _ = strconv.Atoi(numStr)
+		}
+		if i < len(parts2) {
+			numStr := strings.Split(parts2[i], "-")[0]
+			n2, _ = strconv.Atoi(numStr)
+		}
+
+		if n1 < n2 {
+			return -1
+		}
+		if n1 > n2 {
+			return 1
+		}
+	}
+
+	return 0
 }
 
 // CheckForUpdates checks GitHub for newer releases
@@ -90,7 +143,8 @@ func CheckForUpdates(repoOwner, repoName string) *UpdateInfo {
 	info.LatestVersion = latestVersion
 	info.ReleaseURL = release.HTMLURL
 	info.ReleaseNotes = release.Body
-	info.UpdateAvailable = latestVersion != Version
+	// Use proper semver comparison: update available if latest > current
+	info.UpdateAvailable = compareVersions(latestVersion, Version) > 0
 
 	// Cache the result
 	cacheMu.Lock()

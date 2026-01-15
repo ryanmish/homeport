@@ -74,6 +74,9 @@ func main() {
 		log.Fatalf("Failed to create directories: %v", err)
 	}
 
+	// Check for interrupted upgrades (e.g., container restarted during upgrade)
+	api.CheckUpgradeCompletion(cfg.DataDir)
+
 	// Initialize store
 	st, err := store.New(cfg.DBPath())
 	if err != nil {

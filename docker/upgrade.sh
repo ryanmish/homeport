@@ -10,7 +10,9 @@ set -e
 # Configuration
 VERSION="${1:-latest}"
 IMAGE="ghcr.io/ryanmish/homeport:$VERSION"
-COMPOSE_DIR="${COMPOSE_DIR:-/home/ryan/homeport/docker}"
+# When running inside container, compose dir is mounted at /homeport-compose
+# When running on host, it's the current directory or specified via env
+COMPOSE_DIR="${COMPOSE_DIR:-/homeport-compose}"
 DATA_DIR="${DATA_DIR:-/srv/homeport/data}"
 STATUS_FILE="$DATA_DIR/upgrade-status.json"
 LOG_FILE="$DATA_DIR/upgrade.log"
@@ -87,10 +89,23 @@ if [ -n "$CURRENT_IMAGE" ]; then
     echo "Tagged $CURRENT_IMAGE as rollback" >> "$LOG_FILE"
 fi
 
-# Restart with new image
+# Update .env file with new version (persists across reboots)
 write_status "restarting" "Restarting services..." false false
-echo "Restarting with HOMEPORT_VERSION=$VERSION" >> "$LOG_FILE"
+echo "Updating HOMEPORT_VERSION in .env to $VERSION" >> "$LOG_FILE"
 cd "$COMPOSE_DIR"
+if [ -f ".env" ]; then
+    # Replace existing HOMEPORT_VERSION line or add it if missing
+    if grep -q "^HOMEPORT_VERSION=" .env; then
+        sed -i "s/^HOMEPORT_VERSION=.*/HOMEPORT_VERSION=$VERSION/" .env
+    else
+        echo "HOMEPORT_VERSION=$VERSION" >> .env
+    fi
+else
+    echo "HOMEPORT_VERSION=$VERSION" > .env
+fi
+
+# Restart with new image
+echo "Restarting with HOMEPORT_VERSION=$VERSION" >> "$LOG_FILE"
 export HOMEPORT_VERSION="$VERSION"
 docker compose up -d >> "$LOG_FILE" 2>&1
 
@@ -101,13 +116,60 @@ for i in $(seq 1 30); do
     if curl -sf http://localhost:8080/api/status > /dev/null 2>&1; then
         write_status "complete" "Upgrade complete!" false true
         echo "Health check passed on attempt $i" >> "$LOG_FILE"
+
+        # Clean up old images to save disk space (keep rollback image for safety)
+        echo "Cleaning up old images..." >> "$LOG_FILE"
+        # Remove dangling images
+        docker image prune -f >> "$LOG_FILE" 2>&1 || true
+        # Remove old homeport images except current and rollback
+        docker images "ghcr.io/ryanmish/homeport" --format "{{.Tag}}" 2>/dev/null | \
+            grep -v -E "^($VERSION|rollback|latest)$" | \
+            xargs -I {} docker rmi "ghcr.io/ryanmish/homeport:{}" >> "$LOG_FILE" 2>&1 || true
+        echo "Cleanup complete" >> "$LOG_FILE"
+
         echo "=== Upgrade completed successfully at $(date) ===" >> "$LOG_FILE"
         exit 0
     fi
     sleep 1
 done
 
-# Health check failed
-write_status "error" "New version failed health check. Check logs." true false
+# Health check failed - attempt automatic rollback
 echo "ERROR: Health check failed after 30 seconds" >> "$LOG_FILE"
-exit 1
+echo "Attempting automatic rollback..." >> "$LOG_FILE"
+write_status "rolling_back" "Upgrade failed, rolling back..." false false
+
+# Check if rollback image exists
+if docker image inspect "ghcr.io/ryanmish/homeport:rollback" > /dev/null 2>&1; then
+    # Restore previous version in .env
+    if grep -q "^HOMEPORT_VERSION=" .env; then
+        sed -i "s/^HOMEPORT_VERSION=.*/HOMEPORT_VERSION=rollback/" .env
+    else
+        echo "HOMEPORT_VERSION=rollback" >> .env
+    fi
+
+    # Restart with rollback image
+    export HOMEPORT_VERSION="rollback"
+    docker compose up -d >> "$LOG_FILE" 2>&1
+
+    # Wait for rollback to be healthy
+    echo "Waiting for rollback health check..." >> "$LOG_FILE"
+    for i in $(seq 1 30); do
+        if curl -sf http://localhost:8080/api/status > /dev/null 2>&1; then
+            write_status "rolled_back" "Upgrade failed. Rolled back to previous version." true false
+            echo "Rollback successful on attempt $i" >> "$LOG_FILE"
+            echo "=== Rolled back successfully at $(date) ===" >> "$LOG_FILE"
+            exit 1
+        fi
+        sleep 1
+    done
+
+    # Rollback also failed
+    write_status "error" "Upgrade failed and rollback failed. Manual intervention required." true false
+    echo "ERROR: Rollback also failed" >> "$LOG_FILE"
+    exit 1
+else
+    # No rollback image available
+    write_status "error" "Upgrade failed. No rollback image available." true false
+    echo "ERROR: No rollback image available" >> "$LOG_FILE"
+    exit 1
+fi

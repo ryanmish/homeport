@@ -1,9 +1,19 @@
 #!/bin/bash
 # Homeport Install Script
 # Usage: curl -fsSL https://raw.githubusercontent.com/ryanmish/homeport/main/scripts/install.sh | bash
+# Install specific version: curl -fsSL ... | bash -s -- v1.2.0
 
 main() {
     # Note: We don't use set -e because we need graceful error handling
+
+    # Parse version argument (e.g., "v1.2.0" or "latest")
+    HOMEPORT_VERSION="${1:-latest}"
+    # Strip 'v' prefix if present for consistency
+    HOMEPORT_VERSION="${HOMEPORT_VERSION#v}"
+    # Re-add 'v' prefix for tagged versions (not "latest" or "dev")
+    if [[ "$HOMEPORT_VERSION" =~ ^[0-9] ]]; then
+        HOMEPORT_VERSION="v$HOMEPORT_VERSION"
+    fi
 
     # Ensure we can read from terminal (important when script is piped)
     if [ ! -t 0 ]; then
@@ -35,7 +45,11 @@ EOF
     echo ""
     echo -e "${BOLD}Remote Development Environment${NC}"
     echo ""
-    echo "Initiating launch sequence..."
+    if [ "$HOMEPORT_VERSION" = "latest" ]; then
+        echo "Initiating launch sequence..."
+    else
+        echo "Initiating launch sequence (version: $HOMEPORT_VERSION)..."
+    fi
     echo "This mission will deploy Homeport to your server."
     echo ""
 
@@ -462,9 +476,10 @@ CFGEOF
         echo "CODE_SERVER_AUTH=none"
         echo "COOKIE_SECRET=$COOKIE_SECRET"
         echo "ADMIN_PASSWORD_HASH=$ESCAPED_HASH"
+        echo "HOMEPORT_VERSION=${HOMEPORT_VERSION:-latest}"
     } > "$HOMEPORT_DIR/docker/.env"
 
-    echo "Building Docker images (this may take a few minutes)..."
+    echo "Pulling Docker images..."
     cd "$HOMEPORT_DIR/docker"
 
     # Determine docker compose command
@@ -486,11 +501,20 @@ CFGEOF
         fi
     }
 
-    if ! run_docker $COMPOSE build; then
-        echo -e "${RED}Docker build failed.${NC}"
-        exit 1
+    # Try to pull pre-built images first (much faster ~30s vs ~5min build)
+    echo "Attempting to pull pre-built images from GitHub Container Registry..."
+    if run_docker $COMPOSE pull 2>/dev/null; then
+        echo -e "${GREEN}[*]${NC} Docker images pulled"
+    else
+        # Fall back to building from source if pull fails (e.g., no release yet)
+        echo -e "${YELLOW}[!]${NC} Pre-built images not available, building from source..."
+        echo "    (This may take a few minutes)"
+        if ! run_docker $COMPOSE build; then
+            echo -e "${RED}Docker build failed.${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}[*]${NC} Docker images built"
     fi
-    echo -e "${GREEN}[*]${NC} Docker images built"
 
     echo "Starting services..."
     if ! run_docker $COMPOSE up -d; then

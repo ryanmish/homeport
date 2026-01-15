@@ -97,7 +97,7 @@ export interface UpdateInfo {
 }
 
 export interface UpgradeStatus {
-  step: 'idle' | 'checking' | 'pulling' | 'restarting' | 'verifying' | 'complete' | 'error'
+  step: 'idle' | 'checking' | 'pulling' | 'restarting' | 'verifying' | 'complete' | 'rolling_back' | 'rolled_back' | 'error'
   message: string
   error: boolean
   completed: boolean
@@ -252,6 +252,11 @@ export const api = {
 
   getUpgradeStatus: () =>
     fetchJSON<UpgradeStatus>('/upgrade/status'),
+
+  rollback: () =>
+    fetchJSON<{ status: string }>('/rollback', {
+      method: 'POST',
+    }),
 
   // Process management
   getProcesses: () =>

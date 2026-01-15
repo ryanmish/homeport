@@ -20,8 +20,10 @@ services:
       # Claude Code config (persistent volume + instructions file)
       - claude-config-homeport:/home/homeport/.claude
       - ./CLAUDE.md:/home/homeport/.claude/CLAUDE.md:ro
-      # Docker socket for self-upgrade capability
+      # Docker socket and compose directory for self-upgrade capability
+      # Compose dir is read-write so upgrade script can update .env with new version
       - /var/run/docker.sock:/var/run/docker.sock
+      - .:/homeport-compose
     environment:
       - HOMEPORT_EXTERNAL_URL=${EXTERNAL_URL:-http://localhost}
       - HOMEPORT_COOKIE_SECRET=${COOKIE_SECRET:-}

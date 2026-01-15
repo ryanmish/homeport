@@ -64,11 +64,12 @@ main() {
 
     if [ "$FORCE" = false ]; then
         echo "What will be removed:"
-        echo "  - Docker containers, images, networks, and volumes"
+        echo "  - Docker containers, images (including ghcr.io), networks, and volumes"
         echo "  - Systemd services (homeport + cloudflared)"
         echo "  - Cloudflare tunnel"
         echo "  - CLI command (/usr/local/bin/homeport)"
         echo "  - All config (~/.cloudflared, ~/.homeport, .env)"
+        echo "  - Upgrade status files and logs (in Docker volumes)"
         echo "  - Source code directory ($HOMEPORT_DIR)"
         echo ""
         echo -e "${YELLOW}What will NOT be removed:${NC}"
@@ -152,17 +153,22 @@ main() {
         docker network rm docker_default homeport_default >/dev/null 2>&1 || true
 
         if [ "$REMOVE_VOLUMES" = true ]; then
-            echo "Removing volumes..."
+            echo "Removing volumes (includes repos, settings, upgrade logs)..."
             docker volume rm docker_homeport-data docker_repos docker_code-server-data docker_code-server-config docker_caddy-data docker_caddy-config docker_claude-config docker_claude-config-homeport >/dev/null 2>&1 || true
             docker volume rm homeport-data repos code-server-data code-server-config caddy-data caddy-config claude-config claude-config-homeport >/dev/null 2>&1 || true
             echo -e "${GREEN}[*]${NC} Volumes removed"
         else
-            echo -e "${YELLOW}[!]${NC} Volumes preserved"
+            echo -e "${YELLOW}[!]${NC} Volumes preserved (includes upgrade status/logs)"
         fi
 
         echo "Removing images..."
+        # Remove locally built images
         docker rmi docker-homeportd docker-code-server >/dev/null 2>&1 || true
+        # Remove ghcr.io pre-built images (all versions)
+        docker images "ghcr.io/ryanmish/homeport" -q 2>/dev/null | xargs -r docker rmi >/dev/null 2>&1 || true
+        # Remove base images
         docker rmi codercom/code-server:latest caddy:2-alpine alpine:latest >/dev/null 2>&1 || true
+        # Remove any other homeport-related images
         docker images --filter "reference=*homeport*" -q 2>/dev/null | xargs -r docker rmi >/dev/null 2>&1 || true
 
         echo -e "${GREEN}[*]${NC} Docker resources cleaned"

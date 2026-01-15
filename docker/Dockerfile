@@ -51,6 +51,10 @@ RUN apk add --no-cache \
     bash \
     su-exec \
     icu-data-full \
+    curl \
+    # Docker CLI for self-upgrade capability
+    docker-cli \
+    docker-cli-compose \
     # Build tools for native npm modules (sharp, bcrypt, sqlite3, etc.)
     python3 \
     make \
