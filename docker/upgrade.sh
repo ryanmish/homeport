@@ -13,6 +13,13 @@ IMAGE="ghcr.io/ryanmish/homeport:$VERSION"
 # When running inside container, compose dir is mounted at /homeport-compose
 # When running on host, it's the current directory or specified via env
 COMPOSE_DIR="${COMPOSE_DIR:-/homeport-compose}"
+
+# Docker API compatibility - Alpine's docker-cli may be older than host's dockerd
+# Set to minimum required version for compatibility
+export DOCKER_API_VERSION=1.44
+
+# Compose project name must match the original install (from ~/homeport/docker)
+export COMPOSE_PROJECT_NAME=docker
 DATA_DIR="${DATA_DIR:-/srv/homeport/data}"
 STATUS_FILE="$DATA_DIR/upgrade-status.json"
 LOG_FILE="$DATA_DIR/upgrade.log"

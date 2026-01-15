@@ -8,6 +8,12 @@ set -e
 
 # Configuration
 COMPOSE_DIR="${COMPOSE_DIR:-/homeport-compose}"
+
+# Docker API compatibility - Alpine's docker-cli may be older than host's dockerd
+export DOCKER_API_VERSION=1.44
+
+# Compose project name must match the original install (from ~/homeport/docker)
+export COMPOSE_PROJECT_NAME=docker
 DATA_DIR="${DATA_DIR:-/srv/homeport/data}"
 STATUS_FILE="$DATA_DIR/upgrade-status.json"
 LOG_FILE="$DATA_DIR/upgrade.log"

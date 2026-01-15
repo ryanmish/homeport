@@ -33,10 +33,15 @@ var (
 	cacheTime    time.Time
 )
 
+// GetVersion returns the version string without the "v" prefix
+func GetVersion() string {
+	return strings.TrimPrefix(Version, "v")
+}
+
 // GetInfo returns version information
 func GetInfo() map[string]string {
 	return map[string]string{
-		"version":    Version,
+		"version":    GetVersion(),
 		"git_commit": GitCommit,
 		"build_time": BuildTime,
 	}
@@ -104,7 +109,7 @@ func CheckForUpdates(repoOwner, repoName string) *UpdateInfo {
 	cacheMu.RUnlock()
 
 	info := &UpdateInfo{
-		CurrentVersion: Version,
+		CurrentVersion: GetVersion(),
 		CheckedAt:      time.Now().Format(time.RFC3339),
 	}
 
