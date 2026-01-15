@@ -56,7 +56,7 @@ func NewServer(cfg *config.Config, st *store.Store) *Server {
 		github:   github.NewClient(cfg.ReposDir),
 		procs:    process.NewManager(),
 		auth:     auth.New(cfg.PasswordHash, cfg.CookieSecret),
-		termMgr:  terminal.NewManager(),
+		termMgr:  terminal.NewManager(st),
 		stopScan: make(chan struct{}),
 	}
 

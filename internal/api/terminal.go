@@ -175,6 +175,10 @@ func (s *Server) handleTerminalWebSocket(w http.ResponseWriter, r *http.Request)
 	outputCh := session.Subscribe()
 	defer session.Unsubscribe(outputCh)
 
+	// Subscribe to terminal events (title changes, command completion)
+	eventCh := session.SubscribeEvents()
+	defer session.UnsubscribeEvents(eventCh)
+
 	var wg sync.WaitGroup
 	done := make(chan struct{})
 
@@ -191,6 +195,18 @@ func (s *Server) handleTerminalWebSocket(w http.ResponseWriter, r *http.Request)
 					return
 				}
 				if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
+					return
+				}
+			case event, ok := <-eventCh:
+				if !ok {
+					return
+				}
+				// Send events as JSON messages
+				eventJSON, _ := json.Marshal(map[string]string{
+					"type": event.Type,
+					"data": event.Data,
+				})
+				if err := conn.WriteMessage(websocket.TextMessage, eventJSON); err != nil {
 					return
 				}
 			}
@@ -399,6 +415,28 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         .connection-status.disconnected { background: #991b1b; color: #fecaca; }
         .connection-status.connecting { background: #92400e; color: #fef3c7; }
         .connection-status.hidden { opacity: 0; pointer-events: none; }
+
+        /* Command completion toast */
+        .command-toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 1000;
+            cursor: pointer;
+            animation: slideIn 0.3s ease-out;
+            max-width: 300px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        body.dark .command-toast { background: #065f46; color: #d1fae5; }
+        body.light .command-toast { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
 
         /* Mobile toolbar */
         .mobile-toolbar {
@@ -609,10 +647,46 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             tabs.forEach((tab, i) => {
                 const el = document.createElement('div');
                 el.className = 'tab' + (tab.id === activeTabId ? ' active' : '');
-                el.innerHTML = '<span>Terminal ' + (i + 1) + '</span><div class="tab-close" onclick="event.stopPropagation(); closeTab(\'' + tab.id + '\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>';
+                // Show title if available, otherwise show "Terminal N"
+                const displayTitle = tab.title ? truncateTitle(tab.title, 30) : 'Terminal ' + (i + 1);
+                el.innerHTML = '<span title="' + escapeHtml(tab.title || '') + '">' + escapeHtml(displayTitle) + '</span><div class="tab-close" onclick="event.stopPropagation(); closeTab(\'' + tab.id + '\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>';
                 el.onclick = () => switchTab(tab.id);
                 tabBar.insertBefore(el, newBtn);
             });
+        }
+
+        function truncateTitle(title, maxLen) {
+            if (title.length <= maxLen) return title;
+            return title.substring(0, maxLen - 1) + '…';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showCommandNotification(tab, duration) {
+            // Only show notification if this tab is not active
+            if (tab.id === activeTabId && document.hasFocus()) return;
+
+            const title = tab.title || 'Command';
+            const msg = title + ' completed (' + duration + ')';
+
+            // Create toast notification
+            const toast = document.createElement('div');
+            toast.className = 'command-toast';
+            toast.textContent = msg;
+            toast.onclick = () => { switchTab(tab.id); toast.remove(); };
+            document.body.appendChild(toast);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => toast.remove(), 5000);
+
+            // Browser notification if permitted
+            if (Notification.permission === 'granted') {
+                new Notification('Homeport', { body: msg, tag: 'cmd-' + tab.id });
+            }
         }
 
         function createTab(sessionId = null) {
@@ -680,6 +754,11 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
                         const msg = JSON.parse(e.data);
                         if (msg.type === 'session' && msg.id) {
                             tab.sessionId = msg.id;
+                        } else if (msg.type === 'title' && msg.data) {
+                            tab.title = msg.data;
+                            renderTabs();
+                        } else if (msg.type === 'command_complete' && msg.data) {
+                            showCommandNotification(tab, msg.data);
                         }
                     } catch { tab.term.write(e.data); }
                 }

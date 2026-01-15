@@ -45,3 +45,15 @@ type AccessLog struct {
 	Authenticated bool      `json:"authenticated"`
 }
 
+// TerminalSession represents a persisted terminal session
+type TerminalSession struct {
+	ID        string    `json:"id"`
+	RepoID    string    `json:"repo_id"`
+	RepoPath  string    `json:"repo_path"`
+	PID       int       `json:"pid,omitempty"`
+	Title     string    `json:"title,omitempty"`
+	Status    string    `json:"status"` // "running", "exited"
+	CreatedAt time.Time `json:"created_at"`
+	LastUsed  time.Time `json:"last_used"`
+}
+

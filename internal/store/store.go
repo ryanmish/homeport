@@ -62,6 +62,16 @@ func (s *Store) migrate() error {
 			timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			authenticated BOOLEAN
 		)`,
+		`CREATE TABLE IF NOT EXISTS terminal_sessions (
+			id TEXT PRIMARY KEY,
+			repo_id TEXT NOT NULL,
+			repo_path TEXT NOT NULL,
+			pid INTEGER,
+			title TEXT,
+			status TEXT DEFAULT 'running',
+			created_at TIMESTAMP NOT NULL,
+			last_used TIMESTAMP NOT NULL
+		)`,
 	}
 
 	for _, m := range migrations {
@@ -292,4 +302,110 @@ func (s *Store) GetAllAccessLogs(limit int) ([]AccessLog, error) {
 		logs = append(logs, log)
 	}
 	return logs, nil
+}
+
+// Terminal session operations
+
+func (s *Store) SaveTerminalSession(sess *TerminalSession) error {
+	_, err := s.db.Exec(`
+		INSERT INTO terminal_sessions (id, repo_id, repo_path, pid, title, status, created_at, last_used)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			pid = excluded.pid,
+			title = excluded.title,
+			status = excluded.status,
+			last_used = excluded.last_used
+	`, sess.ID, sess.RepoID, sess.RepoPath, sess.PID, sess.Title, sess.Status, sess.CreatedAt, sess.LastUsed)
+	return err
+}
+
+func (s *Store) GetTerminalSession(id string) (*TerminalSession, error) {
+	var sess TerminalSession
+	var pid sql.NullInt64
+	var title sql.NullString
+	err := s.db.QueryRow(`
+		SELECT id, repo_id, repo_path, pid, title, status, created_at, last_used
+		FROM terminal_sessions WHERE id = ?
+	`, id).Scan(&sess.ID, &sess.RepoID, &sess.RepoPath, &pid, &title, &sess.Status, &sess.CreatedAt, &sess.LastUsed)
+	if err != nil {
+		return nil, err
+	}
+	sess.PID = int(pid.Int64)
+	sess.Title = title.String
+	return &sess, nil
+}
+
+func (s *Store) ListTerminalSessions() ([]TerminalSession, error) {
+	rows, err := s.db.Query(`
+		SELECT id, repo_id, repo_path, pid, title, status, created_at, last_used
+		FROM terminal_sessions ORDER BY last_used DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []TerminalSession
+	for rows.Next() {
+		var sess TerminalSession
+		var pid sql.NullInt64
+		var title sql.NullString
+		if err := rows.Scan(&sess.ID, &sess.RepoID, &sess.RepoPath, &pid, &title, &sess.Status, &sess.CreatedAt, &sess.LastUsed); err != nil {
+			return nil, err
+		}
+		sess.PID = int(pid.Int64)
+		sess.Title = title.String
+		sessions = append(sessions, sess)
+	}
+	return sessions, nil
+}
+
+func (s *Store) ListTerminalSessionsByRepo(repoID string) ([]TerminalSession, error) {
+	rows, err := s.db.Query(`
+		SELECT id, repo_id, repo_path, pid, title, status, created_at, last_used
+		FROM terminal_sessions WHERE repo_id = ? ORDER BY last_used DESC
+	`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []TerminalSession
+	for rows.Next() {
+		var sess TerminalSession
+		var pid sql.NullInt64
+		var title sql.NullString
+		if err := rows.Scan(&sess.ID, &sess.RepoID, &sess.RepoPath, &pid, &title, &sess.Status, &sess.CreatedAt, &sess.LastUsed); err != nil {
+			return nil, err
+		}
+		sess.PID = int(pid.Int64)
+		sess.Title = title.String
+		sessions = append(sessions, sess)
+	}
+	return sessions, nil
+}
+
+func (s *Store) UpdateTerminalSessionStatus(id string, status string) error {
+	_, err := s.db.Exec(`UPDATE terminal_sessions SET status = ?, last_used = ? WHERE id = ?`, status, time.Now(), id)
+	return err
+}
+
+func (s *Store) UpdateTerminalSessionTitle(id string, title string) error {
+	_, err := s.db.Exec(`UPDATE terminal_sessions SET title = ?, last_used = ? WHERE id = ?`, title, time.Now(), id)
+	return err
+}
+
+func (s *Store) UpdateTerminalSessionLastUsed(id string) error {
+	_, err := s.db.Exec(`UPDATE terminal_sessions SET last_used = ? WHERE id = ?`, time.Now(), id)
+	return err
+}
+
+func (s *Store) DeleteTerminalSession(id string) error {
+	_, err := s.db.Exec(`DELETE FROM terminal_sessions WHERE id = ?`, id)
+	return err
+}
+
+func (s *Store) MarkAllTerminalSessionsExited() error {
+	_, err := s.db.Exec(`UPDATE terminal_sessions SET status = 'exited' WHERE status = 'running'`)
+	return err
 }
