@@ -1,9 +1,6 @@
 # Build stage
 FROM golang:1.22-alpine AS builder
 
-# Version is injected at build time (via GitHub Actions or docker build --build-arg)
-ARG VERSION=dev
-
 WORKDIR /build
 
 # Install git for go mod download
@@ -15,6 +12,10 @@ RUN go mod download
 
 # Copy source code
 COPY . .
+
+# Version is injected at build time (via GitHub Actions or docker build --build-arg)
+# ARG declared here so changes to VERSION bust the cache for the build commands below
+ARG VERSION=dev
 
 # Build daemon and CLI with version injected
 RUN CGO_ENABLED=0 GOOS=linux go build \
