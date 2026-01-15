@@ -112,14 +112,30 @@ fi
 
 # Build from source
 write_status "building" "Building update..." false false
-echo "Building from source..." >> "$LOG_FILE"
+echo "Building from source with VERSION=$VERSION..." >> "$LOG_FILE"
 cd "$COMPOSE_DIR"
-if ! docker compose build --build-arg VERSION="$VERSION" >> "$LOG_FILE" 2>&1; then
+
+# Set HOMEPORT_VERSION env var - docker-compose.yml uses this for build args
+export HOMEPORT_VERSION="$VERSION"
+
+if ! docker compose build >> "$LOG_FILE" 2>&1; then
     write_status "error" "Failed to build update" true false
     echo "ERROR: Build failed" >> "$LOG_FILE"
     exit 1
 fi
 echo "Build complete" >> "$LOG_FILE"
+
+# Update .env with new version (persists across reboots)
+echo "Updating .env with HOMEPORT_VERSION=$VERSION" >> "$LOG_FILE"
+if [ -f ".env" ]; then
+    if grep -q "^HOMEPORT_VERSION=" .env; then
+        sed -i "s/^HOMEPORT_VERSION=.*/HOMEPORT_VERSION=$VERSION/" .env
+    else
+        echo "HOMEPORT_VERSION=$VERSION" >> .env
+    fi
+else
+    echo "HOMEPORT_VERSION=$VERSION" > .env
+fi
 
 # Restart with new build
 write_status "restarting" "Restarting services..." false false

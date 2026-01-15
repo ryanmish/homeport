@@ -14,7 +14,7 @@ import (
 
 // UpgradeStatus represents the current state of an upgrade operation
 type UpgradeStatus struct {
-	Step      string `json:"step"`      // "pulling", "restarting", "verifying", "complete", "rolling_back", "rolled_back", "error"
+	Step      string `json:"step"`      // "idle", "starting", "checking", "pulling", "building", "restarting", "verifying", "complete", "rolling_back", "rolled_back", "error"
 	Message   string `json:"message"`   // Human-readable status message
 	Error     bool   `json:"error"`     // Whether an error occurred
 	Completed bool   `json:"completed"` // Whether the upgrade is complete
