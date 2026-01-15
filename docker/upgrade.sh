@@ -89,6 +89,11 @@ for i in $(seq 1 $MAX_RETRIES); do
 done
 
 # Checkout the requested version
+# Add 'v' prefix if version looks like a semver without it (e.g., 1.0.8 -> v1.0.8)
+if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    VERSION="v$VERSION"
+fi
+
 if [ "$VERSION" = "latest" ]; then
     # Get the latest tag
     VERSION=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "main")
