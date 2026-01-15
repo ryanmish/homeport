@@ -328,6 +328,7 @@ EOF
     if [ -d "$HOMEPORT_DIR/.git" ]; then
         echo "Updating Homeport..."
         cd "$HOMEPORT_DIR"
+        git fetch --tags --quiet
         git pull --quiet
     else
         echo "Downloading Homeport..."
@@ -335,6 +336,19 @@ EOF
         git clone --quiet https://github.com/ryanmish/homeport.git "$HOMEPORT_DIR"
     fi
     cd "$HOMEPORT_DIR"
+    git fetch --tags --quiet
+
+    # Resolve "latest" to actual version tag
+    if [ "$HOMEPORT_VERSION" = "latest" ]; then
+        HOMEPORT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+        echo "Latest version: $HOMEPORT_VERSION"
+    fi
+
+    # Checkout the requested version
+    if [ "$HOMEPORT_VERSION" != "dev" ]; then
+        echo "Checking out $HOMEPORT_VERSION..."
+        git checkout "$HOMEPORT_VERSION" --quiet 2>/dev/null || true
+    fi
 
     # Required Go version
     GO_REQUIRED_MAJOR=1
