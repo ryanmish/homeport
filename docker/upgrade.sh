@@ -67,6 +67,9 @@ echo "Disk space check passed: ${FREE_SPACE}GB available" >> "$LOG_FILE"
 write_status "pulling" "Downloading update..." false false
 echo "Fetching version: $VERSION" >> "$LOG_FILE"
 cd "$REPO_DIR"
+
+# Mark repo as safe (running as root but repo owned by different user)
+git config --global --add safe.directory "$REPO_DIR"
 for i in $(seq 1 $MAX_RETRIES); do
     if git fetch --tags >> "$LOG_FILE" 2>&1; then
         echo "Fetch successful on attempt $i" >> "$LOG_FILE"
