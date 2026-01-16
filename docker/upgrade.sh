@@ -43,8 +43,12 @@ cleanup() {
 trap cleanup EXIT
 echo $$ > "$LOCK_FILE"
 
-# Clear previous log
+# Clear previous log and status
 > "$LOG_FILE"
+rm -f "$STATUS_FILE"
+
+# Write initial status immediately
+write_status "starting" "Starting upgrade to $VERSION..." false false
 
 echo "=== Homeport Upgrade to $VERSION ===" >> "$LOG_FILE"
 echo "Started at: $(date)" >> "$LOG_FILE"
