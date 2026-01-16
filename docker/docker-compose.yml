@@ -1,3 +1,7 @@
+# HOMEPORT_REPO_PATH must be set to the absolute path of the homeport repo on the HOST.
+# This is required because Docker resolves bind mount paths on the host, not inside containers.
+# Example: HOMEPORT_REPO_PATH=/home/ryan/homeport
+
 services:
   # Homeport Daemon
   # Uses network_mode: host to access localhost ports (Linux only)
@@ -21,11 +25,11 @@ services:
       - ${HOME}/.config/gh:/home/homeport/.config/gh
       # Claude Code config (persistent volume + instructions file)
       - claude-config-homeport:/home/homeport/.claude
-      - ./CLAUDE.md:/home/homeport/.claude/CLAUDE.md:ro
+      - ${HOMEPORT_REPO_PATH}/docker/CLAUDE.md:/home/homeport/.claude/CLAUDE.md:ro
       # Docker socket and repo directory for self-upgrade capability
       - /var/run/docker.sock:/var/run/docker.sock
-      - .:/homeport-compose
-      - ..:/homeport-repo
+      - ${HOMEPORT_REPO_PATH}/docker:/homeport-compose
+      - ${HOMEPORT_REPO_PATH}:/homeport-repo
     environment:
       - HOMEPORT_EXTERNAL_URL=${EXTERNAL_URL:-http://localhost}
       - HOMEPORT_COOKIE_SECRET=${COOKIE_SECRET:-}
@@ -74,8 +78,8 @@ services:
       - code-server-config:/home/coder/.config/code-server
       - ${HOME}/.config/gh:/home/coder/.config/gh
       - claude-config:/home/coder/.claude
-      - ./code-server-settings.json:/home/coder/.local/share/code-server/User/settings.json:ro
-      - ./CLAUDE.md:/home/coder/.claude/CLAUDE.md:ro
+      - ${HOMEPORT_REPO_PATH}/docker/code-server-settings.json:/home/coder/.local/share/code-server/User/settings.json:ro
+      - ${HOMEPORT_REPO_PATH}/docker/CLAUDE.md:/home/coder/.claude/CLAUDE.md:ro
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD:-}
       - DOCKER_USER=coder
@@ -94,7 +98,7 @@ services:
     container_name: caddy
     network_mode: host
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${HOMEPORT_REPO_PATH}/docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
     environment:

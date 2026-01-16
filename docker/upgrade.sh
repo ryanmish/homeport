@@ -123,6 +123,9 @@ cd "$COMPOSE_DIR"
 # Set HOMEPORT_VERSION env var - docker-compose.yml uses this for build args
 export HOMEPORT_VERSION="$VERSION"
 
+# Export HOMEPORT_REPO_PATH for docker-compose.yml bind mounts
+export HOMEPORT_REPO_PATH="$REPO_DIR"
+
 if ! docker compose build >> "$LOG_FILE" 2>&1; then
     write_status "error" "Failed to build update" true false
     echo "ERROR: Build failed" >> "$LOG_FILE"
