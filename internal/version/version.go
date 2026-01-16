@@ -58,6 +58,13 @@ func compareVersions(v1, v2 string) int {
 	if v1 == v2 {
 		return 0
 	}
+	// "latest" means built from source - treat as always current
+	if v1 == "latest" {
+		return 1 // latest is always "newer" (no updates needed)
+	}
+	if v2 == "latest" {
+		return -1
+	}
 	if v1 == "dev" || v1 == "unknown" {
 		return -1 // dev/unknown is always "older"
 	}
