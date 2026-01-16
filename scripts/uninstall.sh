@@ -103,7 +103,7 @@ main() {
         docker compose down >/dev/null 2>&1 || true
         cd /tmp 2>/dev/null || cd ~
     fi
-    docker stop homeportd code-server caddy code-server-init homeportd-init >/dev/null 2>&1 || true
+    docker stop homeportd code-server caddy code-server-init homeportd-init homeport-upgrader homeport-rollback 2>/dev/null || true
 
     echo "Stopping systemd services..."
     sudo systemctl stop homeport.service >/dev/null 2>&1 || true
@@ -111,6 +111,15 @@ main() {
     sudo systemctl stop cloudflared >/dev/null 2>&1 || true
     sudo systemctl disable cloudflared >/dev/null 2>&1 || true
     sudo cloudflared service uninstall >/dev/null 2>&1 || true
+
+    # Stop and remove user-level cloudflared service
+    if [ -f "$HOME/.config/systemd/user/cloudflared.service" ]; then
+        echo "Stopping user cloudflared service..."
+        systemctl --user stop cloudflared 2>/dev/null || true
+        systemctl --user disable cloudflared 2>/dev/null || true
+        rm -f "$HOME/.config/systemd/user/cloudflared.service"
+        systemctl --user daemon-reload 2>/dev/null || true
+    fi
 
     echo "Killing cloudflared processes..."
     sudo pkill -9 -x cloudflared >/dev/null 2>&1 || true
@@ -147,7 +156,7 @@ main() {
 
     if docker info >/dev/null 2>&1; then
         echo "Removing containers..."
-        docker rm -f homeportd code-server caddy code-server-init homeportd-init >/dev/null 2>&1 || true
+        docker rm -f homeportd code-server caddy code-server-init homeportd-init homeport-upgrader homeport-rollback 2>/dev/null || true
 
         echo "Removing networks..."
         docker network rm docker_default homeport_default >/dev/null 2>&1 || true
@@ -236,7 +245,7 @@ main() {
         ISSUES=1
     fi
 
-    CONTAINERS=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "^(homeportd|code-server|caddy)$" || true)
+    CONTAINERS=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "^(homeportd|code-server|caddy|code-server-init|homeportd-init|homeport-upgrader|homeport-rollback)$" || true)
     if [ -n "$CONTAINERS" ]; then
         echo -e "${RED}[!]${NC} Containers still exist: $CONTAINERS"
         ISSUES=1

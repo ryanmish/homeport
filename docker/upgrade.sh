@@ -39,17 +39,6 @@ cleanup() {
     rm -f "$LOCK_FILE"
 }
 
-# Check if another upgrade is in progress
-if [ -f "$LOCK_FILE" ]; then
-    pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        write_status "error" "Upgrade already in progress" true false
-        exit 1
-    fi
-    # Stale lock file, remove it
-    rm -f "$LOCK_FILE"
-fi
-
 # Set up lock and cleanup trap
 trap cleanup EXIT
 echo $$ > "$LOCK_FILE"
@@ -100,7 +89,11 @@ if [ "$VERSION" = "latest" ]; then
     echo "Latest version is: $VERSION" >> "$LOG_FILE"
 fi
 echo "Checking out $VERSION..." >> "$LOG_FILE"
-git checkout "$VERSION" >> "$LOG_FILE" 2>&1
+if ! git checkout "$VERSION" >> "$LOG_FILE" 2>&1; then
+    write_status "error" "Failed to checkout version $VERSION" true false
+    echo "ERROR: Failed to checkout $VERSION" >> "$LOG_FILE"
+    exit 1
+fi
 
 # Tag current image for rollback (best effort)
 echo "Tagging current image for rollback..." >> "$LOG_FILE"

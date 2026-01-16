@@ -37,4 +37,4 @@ fi
 echo ""
 echo "  Initiating main launch sequence..."
 echo ""
-exec bash "$INSTALL_DIR/scripts/install.sh"
+exec bash "$INSTALL_DIR/scripts/install.sh" "$@"

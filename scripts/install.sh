@@ -491,6 +491,7 @@ CFGEOF
         echo "COOKIE_SECRET=$COOKIE_SECRET"
         echo "ADMIN_PASSWORD_HASH=$ESCAPED_HASH"
         echo "HOMEPORT_VERSION=${HOMEPORT_VERSION:-latest}"
+        echo "HOMEPORT_REPO_PATH=$HOMEPORT_DIR"
     } > "$HOMEPORT_DIR/docker/.env"
 
     echo "Building Docker images..."

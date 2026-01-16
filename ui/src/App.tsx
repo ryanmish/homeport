@@ -1955,6 +1955,7 @@ function SettingsModal({
   const [changingPassword, setChangingPassword] = useState(false)
   const [upgradeStatus, setUpgradeStatus] = useState<UpgradeStatus | null>(null)
   const [upgrading, setUpgrading] = useState(false)
+  const [rollingBack, setRollingBack] = useState(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
 
   useEffect(() => {
@@ -2022,7 +2023,21 @@ function SettingsModal({
     try {
       await api.startUpgrade(updateInfo.latest_version)
       // Start polling for status immediately
+      const startTime = Date.now()
+      const TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
       const pollStatus = async () => {
+        // Check if we've exceeded the timeout
+        if (Date.now() - startTime > TIMEOUT_MS) {
+          setUpgradeStatus({
+            step: 'timeout',
+            message: 'Upgrade is taking longer than expected. Please check the server status manually.',
+            error: true,
+            completed: false,
+            version: updateInfo.latest_version
+          })
+          setUpgrading(false)
+          return
+        }
         try {
           const status = await api.getUpgradeStatus()
           setUpgradeStatus(status)
@@ -2044,6 +2059,38 @@ function SettingsModal({
     } catch (err) {
       toast.error('Failed to start upgrade')
       setUpgrading(false)
+      setUpgradeStatus(null)
+    }
+  }
+
+  const handleRollback = async () => {
+    setRollingBack(true)
+    setUpgradeStatus({ step: 'rolling_back', message: 'Rolling back to previous version...', error: false, completed: false })
+    try {
+      await api.rollback()
+      // Start polling for status
+      const pollStatus = async () => {
+        try {
+          const status = await api.getUpgradeStatus()
+          setUpgradeStatus(status)
+          if (status.step === 'rolled_back' || status.completed) {
+            // Rollback complete, reload page after delay
+            setTimeout(() => window.location.reload(), 2000)
+          } else if (status.error) {
+            setRollingBack(false)
+          } else {
+            // Continue polling
+            setTimeout(pollStatus, 1000)
+          }
+        } catch {
+          // Server might be restarting, keep polling
+          setTimeout(pollStatus, 2000)
+        }
+      }
+      pollStatus()
+    } catch (err) {
+      toast.error('Failed to rollback')
+      setRollingBack(false)
       setUpgradeStatus(null)
     }
   }
@@ -2251,39 +2298,54 @@ function SettingsModal({
                           </button>
                         )}
                       </div>
-                      {upgrading && upgradeStatus && (
+                      {(upgrading || rollingBack) && upgradeStatus && (
                         <div className={`mt-2 p-2 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}>
                           <div className="flex items-center gap-2">
-                            {upgradeStatus.completed ? (
+                            {upgradeStatus.completed || upgradeStatus.step === 'rolled_back' ? (
                               <Check className="h-4 w-4 text-green-500" />
                             ) : upgradeStatus.error ? (
                               <X className="h-4 w-4 text-red-500" />
                             ) : (
                               <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                             )}
-                            <span className={`text-sm ${upgradeStatus.error ? 'text-red-500' : upgradeStatus.completed ? 'text-green-500' : theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                            <span className={`text-sm ${upgradeStatus.error ? 'text-red-500' : (upgradeStatus.completed || upgradeStatus.step === 'rolled_back') ? 'text-green-500' : theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                               {upgradeStatus.message}
                             </span>
                           </div>
                           {!upgradeStatus.error && (
                             <div className={`mt-2 h-1.5 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
                               <div
-                                className={`h-full rounded-full transition-all duration-500 ${upgradeStatus.completed ? 'bg-green-500' : 'bg-blue-500'}`}
+                                className={`h-full rounded-full transition-all duration-500 ${(upgradeStatus.completed || upgradeStatus.step === 'rolled_back') ? 'bg-green-500' : upgradeStatus.step === 'rolling_back' ? 'bg-amber-500' : 'bg-blue-500'}`}
                                 style={{
-                                  width: upgradeStatus.completed ? '100%' :
+                                  width: (upgradeStatus.completed || upgradeStatus.step === 'rolled_back') ? '100%' :
                                     upgradeStatus.step === 'starting' ? '5%' :
                                     upgradeStatus.step === 'checking' ? '10%' :
                                     upgradeStatus.step === 'pulling' ? '25%' :
                                     upgradeStatus.step === 'building' ? '50%' :
                                     upgradeStatus.step === 'restarting' ? '75%' :
-                                    upgradeStatus.step === 'verifying' ? '90%' : '15%'
+                                    upgradeStatus.step === 'verifying' ? '90%' :
+                                    upgradeStatus.step === 'rolling_back' ? '50%' : '15%'
                                 }}
                               />
                             </div>
                           )}
-                          {upgradeStatus.completed && (
+                          {(upgradeStatus.completed || upgradeStatus.step === 'rolled_back') && (
                             <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                               Reloading page...
+                            </p>
+                          )}
+                          {upgradeStatus.error && !rollingBack && (
+                            <button
+                              onClick={handleRollback}
+                              className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Rollback to Previous Version
+                            </button>
+                          )}
+                          {rollingBack && (
+                            <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                              Rolling back...
                             </p>
                           )}
                         </div>

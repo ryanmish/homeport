@@ -33,16 +33,6 @@ cleanup() {
     rm -f "$LOCK_FILE"
 }
 
-# Check if another operation is in progress
-if [ -f "$LOCK_FILE" ]; then
-    pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        write_status "error" "Another operation in progress" true false
-        exit 1
-    fi
-    rm -f "$LOCK_FILE"
-fi
-
 # Set up lock and cleanup trap
 trap cleanup EXIT
 echo $$ > "$LOCK_FILE"

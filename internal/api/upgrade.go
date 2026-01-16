@@ -25,67 +25,68 @@ type UpgradeStatus struct {
 // POST /api/upgrade
 func (s *Server) handleStartUpgrade(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Version string `json:"version"` // Target version, defaults to "latest"
+		Version string `json:"version"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// Allow empty body, default to latest
 		req.Version = "latest"
 	}
 	if req.Version == "" {
 		req.Version = "latest"
 	}
 
-	// Check if upgrade is already in progress
-	lockFile := filepath.Join(s.cfg.DataDir, "upgrade.lock")
-	if _, err := os.Stat(lockFile); err == nil {
+	// Get repo path from env (set during install)
+	repoDir := os.Getenv("HOMEPORT_REPO_PATH")
+	if repoDir == "" {
+		errorResponse(w, http.StatusInternalServerError, "HOMEPORT_REPO_PATH environment variable not set")
+		return
+	}
+
+	// Get home dir for gh config
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/root"
+	}
+
+	// Check if upgrader already running (use container name, not PID)
+	checkCmd := exec.Command("docker", "ps", "-q", "-f", "name=homeport-upgrader")
+	if output, _ := checkCmd.Output(); len(strings.TrimSpace(string(output))) > 0 {
 		errorResponse(w, http.StatusConflict, "Upgrade already in progress")
 		return
 	}
 
-	// Find the upgrade script
-	// Inside container: /homeport-compose/upgrade.sh (mounted from docker directory)
-	// On host: /home/ryan/homeport/docker/upgrade.sh or similar
-	scriptPaths := []string{
-		"/homeport-compose/upgrade.sh",
-		"/home/ryan/homeport/docker/upgrade.sh",
-		filepath.Join(s.cfg.DataDir, "..", "docker", "upgrade.sh"),
-		"./docker/upgrade.sh",
+	// Clean up any stale upgrader container
+	exec.Command("docker", "rm", "-f", "homeport-upgrader").Run()
+
+	// Spawn the upgrader container
+	args := []string{
+		"run", "--rm", "-d",
+		"--name", "homeport-upgrader",
+		"--network", "host",
+		"--user", "1000:1000",
+		"-v", "/var/run/docker.sock:/var/run/docker.sock",
+		"-v", repoDir + ":/homeport",
+		"-v", "docker_homeport-data:/srv/homeport/data",
+		"-v", homeDir + "/.config/gh:/home/homeport/.config/gh:ro",
+		"-e", "VERSION=" + req.Version,
+		"-e", "COMPOSE_PROJECT_NAME=docker",
+		"-e", "DOCKER_API_VERSION=1.44",
+		"-e", "DATA_DIR=/srv/homeport/data",
+		"-e", "REPO_DIR=/homeport",
+		"-e", "COMPOSE_DIR=/homeport/docker",
+		"homeport:latest",
+		"/bin/bash", "/homeport/docker/upgrade.sh", req.Version,
 	}
 
-	var scriptPath string
-	for _, p := range scriptPaths {
-		if _, err := os.Stat(p); err == nil {
-			scriptPath = p
-			break
-		}
-	}
-
-	if scriptPath == "" {
-		errorResponse(w, http.StatusInternalServerError, "Upgrade script not found")
+	cmd := exec.Command("docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Failed to start upgrade container: %v - %s", err, string(output))
+		errorResponse(w, http.StatusInternalServerError,
+			"Failed to start upgrade: "+err.Error())
 		return
 	}
 
-	// Execute the upgrade script in the background
-	// The script handles its own backgrounding with disown
-	cmd := exec.Command("bash", scriptPath, req.Version)
-	cmd.Dir = filepath.Dir(scriptPath)
-
-	// Set environment variables
-	cmd.Env = append(os.Environ(),
-		"DATA_DIR="+s.cfg.DataDir,
-		"COMPOSE_DIR="+filepath.Dir(scriptPath),
-	)
-
-	if err := cmd.Start(); err != nil {
-		errorResponse(w, http.StatusInternalServerError, "Failed to start upgrade: "+err.Error())
-		return
-	}
-
-	// Don't wait for the command - it handles its own lifecycle
-	go func() {
-		cmd.Wait()
-	}()
-
+	log.Printf("Started upgrade container for version %s", req.Version)
 	jsonResponse(w, http.StatusAccepted, map[string]string{
 		"status":  "started",
 		"version": req.Version,
@@ -95,51 +96,63 @@ func (s *Server) handleStartUpgrade(w http.ResponseWriter, r *http.Request) {
 // handleRollback triggers a rollback to the previous version
 // POST /api/rollback
 func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
-	// Check if rollback is already in progress
-	lockFile := filepath.Join(s.cfg.DataDir, "upgrade.lock")
-	if _, err := os.Stat(lockFile); err == nil {
-		errorResponse(w, http.StatusConflict, "Operation already in progress")
+	// Get repo path from env
+	repoDir := os.Getenv("HOMEPORT_REPO_PATH")
+	if repoDir == "" {
+		errorResponse(w, http.StatusInternalServerError, "HOMEPORT_REPO_PATH environment variable not set")
 		return
 	}
 
-	// Find the rollback script
-	scriptPaths := []string{
-		"/homeport-compose/rollback.sh",
-		"/home/ryan/homeport/docker/rollback.sh",
-		filepath.Join(s.cfg.DataDir, "..", "docker", "rollback.sh"),
-		"./docker/rollback.sh",
+	// Get home dir for gh config
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/root"
 	}
 
-	var scriptPath string
-	for _, p := range scriptPaths {
-		if _, err := os.Stat(p); err == nil {
-			scriptPath = p
-			break
-		}
+	// Check if upgrader/rollback already running
+	checkCmd := exec.Command("docker", "ps", "-q", "-f", "name=homeport-upgrader")
+	if output, _ := checkCmd.Output(); len(strings.TrimSpace(string(output))) > 0 {
+		errorResponse(w, http.StatusConflict, "Upgrade already in progress")
+		return
 	}
-
-	if scriptPath == "" {
-		errorResponse(w, http.StatusInternalServerError, "Rollback script not found")
+	checkCmd2 := exec.Command("docker", "ps", "-q", "-f", "name=homeport-rollback")
+	if output, _ := checkCmd2.Output(); len(strings.TrimSpace(string(output))) > 0 {
+		errorResponse(w, http.StatusConflict, "Rollback already in progress")
 		return
 	}
 
-	// Execute the rollback script
-	cmd := exec.Command("bash", scriptPath)
-	cmd.Dir = filepath.Dir(scriptPath)
-	cmd.Env = append(os.Environ(),
-		"DATA_DIR="+s.cfg.DataDir,
-		"COMPOSE_DIR="+filepath.Dir(scriptPath),
-	)
+	// Clean up any stale container
+	exec.Command("docker", "rm", "-f", "homeport-rollback").Run()
 
-	if err := cmd.Start(); err != nil {
-		errorResponse(w, http.StatusInternalServerError, "Failed to start rollback: "+err.Error())
+	// Spawn the rollback container
+	args := []string{
+		"run", "--rm", "-d",
+		"--name", "homeport-rollback",
+		"--network", "host",
+		"--user", "1000:1000",
+		"-v", "/var/run/docker.sock:/var/run/docker.sock",
+		"-v", repoDir + ":/homeport",
+		"-v", "docker_homeport-data:/srv/homeport/data",
+		"-v", homeDir + "/.config/gh:/home/homeport/.config/gh:ro",
+		"-e", "COMPOSE_PROJECT_NAME=docker",
+		"-e", "DOCKER_API_VERSION=1.44",
+		"-e", "DATA_DIR=/srv/homeport/data",
+		"-e", "REPO_DIR=/homeport",
+		"-e", "COMPOSE_DIR=/homeport/docker",
+		"homeport:latest",
+		"/bin/bash", "/homeport/docker/rollback.sh",
+	}
+
+	cmd := exec.Command("docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Failed to start rollback container: %v - %s", err, string(output))
+		errorResponse(w, http.StatusInternalServerError,
+			"Failed to start rollback: "+err.Error())
 		return
 	}
 
-	go func() {
-		cmd.Wait()
-	}()
-
+	log.Printf("Started rollback container")
 	jsonResponse(w, http.StatusAccepted, map[string]string{
 		"status": "started",
 	})
