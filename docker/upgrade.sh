@@ -49,6 +49,9 @@ echo $$ > "$LOCK_FILE"
 > "$LOG_FILE"
 rm -f "$STATUS_FILE"
 
+# Ensure log file is writable by homeportd
+chown 1000:1000 "$LOG_FILE" 2>/dev/null || true
+
 # Write initial status immediately
 write_status "starting" "Starting upgrade to $VERSION..." false false
 
@@ -142,7 +145,24 @@ fi
 # Restart with new build
 write_status "restarting" "Restarting services..." false false
 echo "Restarting services..." >> "$LOG_FILE"
-docker compose up -d >> "$LOG_FILE" 2>&1
+
+# Start services - retry if needed to handle transient failures
+for attempt in 1 2 3; do
+    docker compose up -d >> "$LOG_FILE" 2>&1
+
+    # Verify critical services are running (not just created)
+    sleep 2
+    HOMEPORTD_STATUS=$(docker inspect -f '{{.State.Status}}' homeportd 2>/dev/null || echo "missing")
+    CADDY_STATUS=$(docker inspect -f '{{.State.Status}}' caddy 2>/dev/null || echo "missing")
+
+    if [ "$HOMEPORTD_STATUS" = "running" ] && [ "$CADDY_STATUS" = "running" ]; then
+        echo "Critical services started on attempt $attempt" >> "$LOG_FILE"
+        break
+    fi
+
+    echo "Services not fully started (homeportd=$HOMEPORTD_STATUS, caddy=$CADDY_STATUS), retrying..." >> "$LOG_FILE"
+    sleep 3
+done
 
 # Health check (wait up to 30s for new container to be healthy)
 write_status "verifying" "Verifying upgrade..." false false
