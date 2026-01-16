@@ -272,35 +272,6 @@ function App() {
     }
   }
 
-  const handlePullAll = async () => {
-    toast('Pulling all repositories...')
-    let updated = 0
-    let upToDate = 0
-    let failed = 0
-    for (const repo of repos) {
-      try {
-        const result = await api.pullRepo(repo.id)
-        if (result.success) {
-          if (result.message === 'Already up to date') {
-            upToDate++
-          } else {
-            updated++
-          }
-        } else {
-          failed++
-        }
-      } catch (err) {
-        failed++
-      }
-    }
-    if (failed > 0) {
-      toast.error(`Pull complete: ${updated} updated, ${upToDate} up to date, ${failed} failed`)
-    } else {
-      toast.success(`Pull complete: ${updated} updated, ${upToDate} already up to date`)
-    }
-    fetchData()
-  }
-
   const handleUpdateStartCommand = async (repo: Repo, command: string) => {
     try {
       await api.updateRepo(repo.id, { start_command: command })
@@ -677,12 +648,6 @@ function App() {
                 <span className={`text-xs sm:text-sm whitespace-nowrap ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
                   {repos.length} repos
                 </span>
-                {repos.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={handlePullAll} className="hidden sm:flex">
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    Pull All
-                  </Button>
-                )}
               </div>
             </div>
 
