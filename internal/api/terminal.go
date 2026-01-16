@@ -434,7 +434,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         body.dark .command-toast { background: #065f46; color: #d1fae5; }
         body.light .command-toast { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
         @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
+            from { transform: translateX(100%%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
 
@@ -744,6 +744,12 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
                 tab.reconnectAttempts = 0;
                 updateStatus('connected', 'Connected');
                 tab.ws.send(JSON.stringify({ type: 'resize', cols: tab.term.cols, rows: tab.term.rows }));
+                // Start ping keepalive
+                tab.pingInterval = setInterval(() => {
+                    if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+                        tab.ws.send(JSON.stringify({ type: 'ping' }));
+                    }
+                }, 30000);
             };
 
             tab.ws.onmessage = (e) => {
@@ -765,6 +771,11 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
             };
 
             tab.ws.onclose = () => {
+                // Clear ping interval
+                if (tab.pingInterval) {
+                    clearInterval(tab.pingInterval);
+                    tab.pingInterval = null;
+                }
                 // Don't reconnect if tab was intentionally closed
                 if (tab.closing) return;
                 if (tab.reconnectAttempts < 5) {
@@ -774,6 +785,10 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
                 } else {
                     updateStatus('disconnected', 'Connection lost');
                 }
+            };
+
+            tab.ws.onerror = (err) => {
+                console.error('WebSocket error:', err);
             };
         }
 
@@ -798,6 +813,12 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 
             const tab = tabs[idx];
             tab.closing = true; // Prevent reconnection
+
+            // Clear ping interval
+            if (tab.pingInterval) {
+                clearInterval(tab.pingInterval);
+                tab.pingInterval = null;
+            }
 
             // Send close message to delete session on server
             if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
@@ -917,7 +938,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
         })();
     </script>
 </body>
-</html>`, repoName, version.Version, repoName, vsCodeLink, repoID, initCmd)
+</html>`, repoName, version.GetVersion(), repoName, vsCodeLink, repoID, initCmd)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(page))
