@@ -72,8 +72,9 @@ func (s *Server) handleStartUpgrade(w http.ResponseWriter, r *http.Request) {
 		"-e", "DATA_DIR=/srv/homeport/data",
 		"-e", "REPO_DIR=/homeport",
 		"-e", "COMPOSE_DIR=/homeport/docker",
+		"--entrypoint", "/bin/bash",
 		"homeport:latest",
-		"/bin/bash", "/homeport/docker/upgrade.sh", req.Version,
+		"/homeport/docker/upgrade.sh", req.Version,
 	}
 
 	cmd := exec.Command("docker", args...)
@@ -137,8 +138,9 @@ func (s *Server) handleRollback(w http.ResponseWriter, r *http.Request) {
 		"-e", "DATA_DIR=/srv/homeport/data",
 		"-e", "REPO_DIR=/homeport",
 		"-e", "COMPOSE_DIR=/homeport/docker",
+		"--entrypoint", "/bin/bash",
 		"homeport:latest",
-		"/bin/bash", "/homeport/docker/rollback.sh",
+		"/homeport/docker/rollback.sh",
 	}
 
 	cmd := exec.Command("docker", args...)
