@@ -490,7 +490,7 @@ CFGEOF
         echo "CODE_SERVER_AUTH=none"
         echo "COOKIE_SECRET=$COOKIE_SECRET"
         echo "ADMIN_PASSWORD_HASH=$ESCAPED_HASH"
-        echo "HOMEPORT_VERSION=${HOMEPORT_VERSION:-latest}"
+        # HOMEPORT_VERSION omitted - Dockerfile auto-detects from git tags
         echo "HOMEPORT_REPO_PATH=$HOMEPORT_DIR"
     } > "$HOMEPORT_DIR/docker/.env"
 

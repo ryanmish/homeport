@@ -13,17 +13,20 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Version is injected at build time (via GitHub Actions or docker build --build-arg)
-# ARG declared here so changes to VERSION bust the cache for the build commands below
-ARG VERSION=dev
-
-# Build daemon and CLI with version injected
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X github.com/gethomeport/homeport/internal/version.Version=${VERSION}" \
-    -o homeportd ./cmd/homeportd
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X github.com/gethomeport/homeport/internal/version.Version=${VERSION}" \
-    -o homeport ./cmd/homeport
+# Version is computed from git tags at build time
+# If VERSION arg is provided and not "dev"/"latest", use it (for CI builds)
+# Otherwise, get version from git describe
+ARG VERSION=auto
+RUN if [ "$VERSION" = "auto" ] || [ "$VERSION" = "dev" ] || [ "$VERSION" = "latest" ]; then \
+        VERSION=$(git describe --tags --always 2>/dev/null || echo "dev"); \
+    fi && \
+    echo "Building version: $VERSION" && \
+    CGO_ENABLED=0 GOOS=linux go build \
+        -ldflags="-s -w -X github.com/gethomeport/homeport/internal/version.Version=${VERSION}" \
+        -o homeportd ./cmd/homeportd && \
+    CGO_ENABLED=0 GOOS=linux go build \
+        -ldflags="-s -w -X github.com/gethomeport/homeport/internal/version.Version=${VERSION}" \
+        -o homeport ./cmd/homeport
 
 # Build UI
 FROM node:20-alpine AS ui-builder

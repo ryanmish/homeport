@@ -7,7 +7,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
       args:
-        VERSION: ${HOMEPORT_VERSION:-dev}
+        VERSION: ${HOMEPORT_VERSION:-auto}
     container_name: homeportd
     network_mode: host
     pid: "host"  # Required to see processes from other containers for port-repo association
