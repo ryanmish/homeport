@@ -1065,11 +1065,9 @@ function RepoCard({
 }) {
   const [showMenu, setShowMenu] = useState(false)
   const [showBranchMenu, setShowBranchMenu] = useState(false)
-  const [showQuickActions, setShowQuickActions] = useState(false)
   const [branches, setBranches] = useState<BranchInfo[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
   const branchMenuRef = useRef<HTMLDivElement>(null)
-  const quickActionsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (showBranchMenu) {
@@ -1084,9 +1082,6 @@ function RepoCard({
       }
       if (branchMenuRef.current && !branchMenuRef.current.contains(e.target as Node)) {
         setShowBranchMenu(false)
-      }
-      if (quickActionsRef.current && !quickActionsRef.current.contains(e.target as Node)) {
-        setShowQuickActions(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -1196,37 +1191,6 @@ function RepoCard({
                 </Button>
               </a>
             )}
-            {/* Quick actions menu */}
-            <div className="relative hidden sm:block" ref={quickActionsRef}>
-              <Button variant="ghost" size="sm" onClick={() => setShowQuickActions(!showQuickActions)} className="h-8 w-8 p-0" title="Quick actions">
-                <Zap className="h-4 w-4" />
-              </Button>
-              {showQuickActions && (
-                <div className={`absolute right-0 top-full mt-1 w-44 rounded-lg shadow-lg border z-50 py-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                  <button
-                    onClick={() => { onExecCommand('install'); setShowQuickActions(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                  >
-                    <Package className="h-4 w-4" />
-                    Install deps
-                  </button>
-                  <button
-                    onClick={() => { onExecCommand('fetch'); setShowQuickActions(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                  >
-                    <Download className="h-4 w-4" />
-                    Git fetch
-                  </button>
-                  <button
-                    onClick={() => { onExecCommand('reset'); setShowQuickActions(false); }}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap text-red-600 ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    Reset HEAD
-                  </button>
-                </div>
-              )}
-            </div>
             <Button variant="ghost" size="sm" onClick={onPull} className="hidden sm:flex h-8 w-8 p-0" title="Pull latest">
               <RefreshCw className="h-4 w-4" />
             </Button>
@@ -1264,19 +1228,34 @@ function RepoCard({
                     <Code className="h-4 w-4" />
                     Open in VS Code
                   </a>
-                  <a
-                    href={`/terminal/${repo.id}`}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                  >
-                    <Terminal className="h-4 w-4" />
-                    Open Terminal
-                  </a>
                   <button
                     onClick={() => { onPull(); setShowMenu(false); }}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap sm:hidden ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
                     <RefreshCw className="h-4 w-4" />
                     Pull Latest
+                  </button>
+                  {/* Quick actions */}
+                  <button
+                    onClick={() => { onExecCommand('install'); setShowMenu(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  >
+                    <Package className="h-4 w-4" />
+                    Install deps
+                  </button>
+                  <button
+                    onClick={() => { onExecCommand('fetch'); setShowMenu(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  >
+                    <Download className="h-4 w-4" />
+                    Git fetch
+                  </button>
+                  <button
+                    onClick={() => { onExecCommand('reset'); setShowMenu(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm whitespace-nowrap text-red-600 ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset HEAD
                   </button>
                   {/* Process controls */}
                   {repo.start_command && (
