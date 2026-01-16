@@ -73,7 +73,7 @@ RUN apk add --no-cache \
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create app user
-RUN adduser -D -h /home/homeport homeport
+RUN adduser -D -u 1000 -h /home/homeport homeport
 
 # Create directories
 RUN mkdir -p /srv/homeport/data /srv/homeport/repos /srv/homeport/ui \
