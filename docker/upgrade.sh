@@ -32,6 +32,8 @@ write_status() {
     local error="${3:-false}"
     local completed="${4:-false}"
     echo "{\"step\": \"$step\", \"message\": \"$message\", \"error\": $error, \"completed\": $completed, \"version\": \"$VERSION\"}" > "$STATUS_FILE"
+    # Ensure homeportd (uid 1000) can read/write the status file
+    chown 1000:1000 "$STATUS_FILE" 2>/dev/null || true
 }
 
 # Cleanup lock file on exit
