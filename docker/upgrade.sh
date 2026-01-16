@@ -182,6 +182,10 @@ for i in $(seq 1 30); do
             xargs -I {} docker rmi "homeport:{}" >> "$LOG_FILE" 2>&1 || true
         echo "Cleanup complete" >> "$LOG_FILE"
 
+        # Return repo to main branch (avoid detached HEAD for future upgrades)
+        cd "$REPO_DIR"
+        git checkout main >> "$LOG_FILE" 2>&1 || true
+
         echo "=== Upgrade completed successfully at $(date) ===" >> "$LOG_FILE"
         exit 0
     fi
