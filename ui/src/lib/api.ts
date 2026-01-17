@@ -97,11 +97,19 @@ export interface UpdateInfo {
 }
 
 export interface UpgradeStatus {
+  // Step values from Go backend: idle, starting, checking, pulling, building, restarting, verifying, complete, rolling_back, rolled_back, error
+  // 'timeout' is a client-side only step used when polling times out
   step: 'idle' | 'starting' | 'checking' | 'pulling' | 'building' | 'restarting' | 'verifying' | 'complete' | 'rolling_back' | 'rolled_back' | 'error' | 'timeout'
   message: string
   error: boolean
   completed: boolean
+  // Fields below are always sent by backend but optional here for client-side partial status objects
   version?: string
+  progress?: number
+  stepNumber?: number
+  totalSteps?: number
+  startedAt?: number  // Unix timestamp (int64 in Go)
+  duration?: number   // Seconds (int64 in Go)
 }
 
 export interface ExecResult {
@@ -257,6 +265,9 @@ export const api = {
     fetchJSON<{ status: string }>('/rollback', {
       method: 'POST',
     }),
+
+  getUpgradeLogs: (lines?: number) =>
+    fetchJSON<{ logs: string }>(`/upgrade/logs${lines ? `?lines=${lines}` : ''}`),
 
   // Process management
   getProcesses: () =>

@@ -24,14 +24,23 @@ STATUS_FILE="$DATA_DIR/upgrade-status.json"
 LOG_FILE="$DATA_DIR/upgrade.log"
 LOCK_FILE="$DATA_DIR/upgrade.lock"
 MAX_RETRIES=3
+TOTAL_STEPS=5
+
+# Capture start time (Unix timestamp)
+STARTED_AT=$(date +%s)
 
 # Write status to JSON file
+# Args: step, message, stepNumber, progress, error, completed
 write_status() {
     local step="$1"
     local message="$2"
-    local error="${3:-false}"
-    local completed="${4:-false}"
-    echo "{\"step\": \"$step\", \"message\": \"$message\", \"error\": $error, \"completed\": $completed, \"version\": \"$VERSION\"}" > "$STATUS_FILE"
+    local step_number="${3:-1}"
+    local progress="${4:-0}"
+    local error="${5:-false}"
+    local completed="${6:-false}"
+    local now=$(date +%s)
+    local duration=$((now - STARTED_AT))
+    echo "{\"step\": \"$step\", \"message\": \"$message\", \"error\": $error, \"completed\": $completed, \"version\": \"$VERSION\", \"progress\": $progress, \"stepNumber\": $step_number, \"totalSteps\": $TOTAL_STEPS, \"startedAt\": $STARTED_AT, \"duration\": $duration}" > "$STATUS_FILE"
     # Ensure homeportd (uid 1000) can read/write the status file
     chown 1000:1000 "$STATUS_FILE" 2>/dev/null || true
 }
@@ -53,23 +62,23 @@ rm -f "$STATUS_FILE"
 chown 1000:1000 "$LOG_FILE" 2>/dev/null || true
 
 # Write initial status immediately
-write_status "starting" "Starting upgrade to $VERSION..." false false
+write_status "starting" "Starting upgrade to $VERSION..." 1 0 false false
 
 echo "=== Homeport Upgrade to $VERSION ===" >> "$LOG_FILE"
 echo "Started at: $(date)" >> "$LOG_FILE"
 
 # Pre-flight: Check disk space (need ~1GB free for images)
-write_status "checking" "Checking disk space..." false false
+write_status "checking" "Checking disk space..." 1 5 false false
 FREE_SPACE=$(df -BG /var/lib/docker 2>/dev/null | tail -1 | awk '{print $4}' | tr -d 'G' || echo "10")
 if [ "$FREE_SPACE" -lt 1 ]; then
-    write_status "error" "Insufficient disk space (need 1GB free, have ${FREE_SPACE}GB)" true false
+    write_status "error" "Insufficient disk space (need 1GB free, have ${FREE_SPACE}GB)" 1 5 true false
     echo "ERROR: Insufficient disk space" >> "$LOG_FILE"
     exit 1
 fi
 echo "Disk space check passed: ${FREE_SPACE}GB available" >> "$LOG_FILE"
 
 # Fetch latest code from GitHub
-write_status "pulling" "Downloading update..." false false
+write_status "pulling" "Downloading update..." 2 10 false false
 echo "Fetching version: $VERSION" >> "$LOG_FILE"
 cd "$REPO_DIR"
 
@@ -81,7 +90,7 @@ for i in $(seq 1 $MAX_RETRIES); do
         break
     fi
     if [ $i -eq $MAX_RETRIES ]; then
-        write_status "error" "Failed to fetch updates after $MAX_RETRIES attempts" true false
+        write_status "error" "Failed to fetch updates after $MAX_RETRIES attempts" 2 15 true false
         echo "ERROR: Fetch failed after $MAX_RETRIES attempts" >> "$LOG_FILE"
         exit 1
     fi
@@ -102,7 +111,7 @@ if [ "$VERSION" = "latest" ]; then
 fi
 echo "Checking out $VERSION..." >> "$LOG_FILE"
 if ! git checkout "$VERSION" >> "$LOG_FILE" 2>&1; then
-    write_status "error" "Failed to checkout version $VERSION" true false
+    write_status "error" "Failed to checkout version $VERSION" 2 20 true false
     echo "ERROR: Failed to checkout $VERSION" >> "$LOG_FILE"
     exit 1
 fi
@@ -116,7 +125,7 @@ if [ -n "$CURRENT_IMAGE" ]; then
 fi
 
 # Build from source
-write_status "building" "Building update..." false false
+write_status "building" "Building update..." 3 30 false false
 echo "Building from source with VERSION=$VERSION..." >> "$LOG_FILE"
 cd "$COMPOSE_DIR"
 
@@ -128,7 +137,7 @@ export HOMEPORT_VERSION="$VERSION"
 export HOMEPORT_REPO_PATH="${HOMEPORT_REPO_PATH:-$REPO_DIR}"
 
 if ! docker compose build >> "$LOG_FILE" 2>&1; then
-    write_status "error" "Failed to build update" true false
+    write_status "error" "Failed to build update" 3 50 true false
     echo "ERROR: Build failed" >> "$LOG_FILE"
     exit 1
 fi
@@ -147,7 +156,7 @@ else
 fi
 
 # Restart with new build
-write_status "restarting" "Restarting services..." false false
+write_status "restarting" "Restarting services..." 4 70 false false
 echo "Restarting services..." >> "$LOG_FILE"
 
 # Start services - retry if needed to handle transient failures
@@ -169,11 +178,11 @@ for attempt in 1 2 3; do
 done
 
 # Health check (wait up to 30s for new container to be healthy)
-write_status "verifying" "Verifying upgrade..." false false
+write_status "verifying" "Verifying upgrade..." 5 90 false false
 echo "Waiting for health check..." >> "$LOG_FILE"
 for i in $(seq 1 30); do
     if curl -sf http://localhost:8080/api/status > /dev/null 2>&1; then
-        write_status "complete" "Upgrade complete!" false true
+        write_status "complete" "Upgrade complete!" 5 100 false true
         echo "Health check passed on attempt $i" >> "$LOG_FILE"
 
         # Clean up old images to save disk space (keep rollback image for safety)
@@ -199,7 +208,7 @@ done
 # Health check failed - attempt automatic rollback
 echo "ERROR: Health check failed after 30 seconds" >> "$LOG_FILE"
 echo "Attempting automatic rollback..." >> "$LOG_FILE"
-write_status "rolling_back" "Upgrade failed, rolling back..." false false
+write_status "rolling_back" "Upgrade failed, rolling back..." 5 95 false false
 
 # Check if rollback image exists
 if docker image inspect "homeport:rollback" > /dev/null 2>&1; then
@@ -218,7 +227,7 @@ if docker image inspect "homeport:rollback" > /dev/null 2>&1; then
     echo "Waiting for rollback health check..." >> "$LOG_FILE"
     for i in $(seq 1 30); do
         if curl -sf http://localhost:8080/api/status > /dev/null 2>&1; then
-            write_status "rolled_back" "Upgrade failed. Rolled back to previous version." true false
+            write_status "rolled_back" "Upgrade failed. Rolled back to previous version." 5 100 true false
             echo "Rollback successful on attempt $i" >> "$LOG_FILE"
             echo "=== Rolled back successfully at $(date) ===" >> "$LOG_FILE"
             exit 1
@@ -227,12 +236,12 @@ if docker image inspect "homeport:rollback" > /dev/null 2>&1; then
     done
 
     # Rollback also failed
-    write_status "error" "Upgrade failed and rollback failed. Manual intervention required." true false
+    write_status "error" "Upgrade failed and rollback failed. Manual intervention required." 5 100 true false
     echo "ERROR: Rollback also failed" >> "$LOG_FILE"
     exit 1
 else
     # No rollback image available
-    write_status "error" "Upgrade failed. No rollback image available." true false
+    write_status "error" "Upgrade failed. No rollback image available." 5 100 true false
     echo "ERROR: No rollback image available" >> "$LOG_FILE"
     exit 1
 fi

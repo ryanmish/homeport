@@ -1871,6 +1871,25 @@ function HelpModal({ theme, onClose }: { theme: Theme; onClose: () => void }) {
   )
 }
 
+// Upgrade step information for progress display
+const UPGRADE_STEPS = [
+  { step: 'checking', label: 'Checking disk space', estimate: '5s' },
+  { step: 'pulling', label: 'Downloading update', estimate: '30s' },
+  { step: 'building', label: 'Building', estimate: '2-3 min' },
+  { step: 'restarting', label: 'Restarting services', estimate: '15s' },
+  { step: 'verifying', label: 'Verifying', estimate: '10s' },
+] as const
+
+function getStepInfo(step: string): { number: number; total: number; label: string } {
+  const idx = UPGRADE_STEPS.findIndex(s => s.step === step)
+  if (idx >= 0) {
+    return { number: idx + 1, total: UPGRADE_STEPS.length, label: UPGRADE_STEPS[idx].label }
+  }
+  if (step === 'starting') return { number: 0, total: UPGRADE_STEPS.length, label: 'Starting' }
+  if (step === 'complete') return { number: UPGRADE_STEPS.length, total: UPGRADE_STEPS.length, label: 'Complete' }
+  return { number: 0, total: UPGRADE_STEPS.length, label: step }
+}
+
 function SettingsModal({
   theme,
   status,
@@ -1901,12 +1920,42 @@ function SettingsModal({
   const [upgrading, setUpgrading] = useState(false)
   const [rollingBack, setRollingBack] = useState(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
+  const [showConfirmUpgrade, setShowConfirmUpgrade] = useState(false)
+  const [showUpgradeLogs, setShowUpgradeLogs] = useState(false)
+  const [upgradeLogs, setUpgradeLogs] = useState('')
+  const [upgradeStartTime, setUpgradeStartTime] = useState<number | null>(null)
+  const [elapsedTime, setElapsedTime] = useState(0)
 
   useEffect(() => {
     api.getGitHubStatus()
       .then(setGithubStatus)
       .finally(() => setLoading(false))
   }, [])
+
+  // Timer for elapsed time during upgrade
+  useEffect(() => {
+    if (!upgradeStartTime) return
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - upgradeStartTime) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [upgradeStartTime])
+
+  // Poll logs when viewing them during upgrade
+  useEffect(() => {
+    if (!showUpgradeLogs) return
+    const fetchLogs = async () => {
+      try {
+        const result = await api.getUpgradeLogs()
+        setUpgradeLogs(result.logs)
+      } catch {
+        // Ignore errors
+      }
+    }
+    fetchLogs()
+    const interval = setInterval(fetchLogs, 2000)
+    return () => clearInterval(interval)
+  }, [showUpgradeLogs])
 
   const handleCheckForUpdates = async () => {
     setCheckingUpdates(true)
@@ -1961,7 +2010,10 @@ function SettingsModal({
 
   const handleStartUpgrade = async () => {
     if (!updateInfo?.latest_version) return
+    setShowConfirmUpgrade(false)
     setUpgrading(true)
+    setUpgradeStartTime(Date.now())
+    setElapsedTime(0)
     // Show immediate feedback before API call
     setUpgradeStatus({ step: 'starting', message: 'Starting upgrade...', error: false, completed: false, version: updateInfo.latest_version })
     try {
@@ -1980,6 +2032,7 @@ function SettingsModal({
             version: updateInfo.latest_version
           })
           setUpgrading(false)
+          setUpgradeStartTime(null)
           return
         }
         try {
@@ -1987,9 +2040,11 @@ function SettingsModal({
           setUpgradeStatus(status)
           if (status.completed) {
             // Upgrade complete, reload page after delay
+            setUpgradeStartTime(null)
             setTimeout(() => window.location.reload(), 2000)
           } else if (status.error) {
             setUpgrading(false)
+            setUpgradeStartTime(null)
           } else {
             // Continue polling
             setTimeout(pollStatus, 1000)
@@ -2004,6 +2059,7 @@ function SettingsModal({
       toast.error('Failed to start upgrade')
       setUpgrading(false)
       setUpgradeStatus(null)
+      setUpgradeStartTime(null)
     }
   }
 
@@ -2037,6 +2093,12 @@ function SettingsModal({
       setRollingBack(false)
       setUpgradeStatus(null)
     }
+  }
+
+  const formatElapsedTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
   }
 
   return (
@@ -2235,66 +2297,118 @@ function SettingsModal({
                         </div>
                         {!upgrading && !upgradeStatus?.completed && (
                           <button
-                            onClick={handleStartUpgrade}
+                            onClick={() => setShowConfirmUpgrade(true)}
                             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
                           >
                             Upgrade
                           </button>
                         )}
                       </div>
+
+                      {/* Upgrade Progress UI */}
                       {(upgrading || rollingBack) && upgradeStatus && (
-                        <div className={`mt-2 p-2 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}>
+                        <div className={`mt-2 p-3 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'} border ${theme === 'dark' ? 'border-gray-800' : 'border-gray-200'}`}>
+                          {/* Step indicator */}
+                          {!upgradeStatus.error && !upgradeStatus.completed && upgradeStatus.step !== 'rolled_back' && (
+                            <div className="flex items-center justify-between mb-2">
+                              <span className={`text-xs font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Step {getStepInfo(upgradeStatus.step).number} of {getStepInfo(upgradeStatus.step).total}
+                              </span>
+                              <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                                {formatElapsedTime(elapsedTime)} elapsed
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Status message */}
                           <div className="flex items-center gap-2">
                             {upgradeStatus.completed || upgradeStatus.step === 'rolled_back' ? (
-                              <Check className="h-4 w-4 text-green-500" />
+                              <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                             ) : upgradeStatus.error ? (
-                              <X className="h-4 w-4 text-red-500" />
+                              <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
                             ) : (
-                              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                              <Loader2 className="h-4 w-4 animate-spin text-blue-500 flex-shrink-0" />
                             )}
                             <span className={`text-sm ${upgradeStatus.error ? 'text-red-500' : (upgradeStatus.completed || upgradeStatus.step === 'rolled_back') ? 'text-green-500' : theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                               {upgradeStatus.message}
                             </span>
                           </div>
+
+                          {/* Progress bar with step markers */}
                           {!upgradeStatus.error && (
-                            <div className={`mt-2 h-1.5 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
-                              <div
-                                className={`h-full rounded-full transition-all duration-500 ${(upgradeStatus.completed || upgradeStatus.step === 'rolled_back') ? 'bg-green-500' : upgradeStatus.step === 'rolling_back' ? 'bg-amber-500' : 'bg-blue-500'}`}
-                                style={{
-                                  width: (upgradeStatus.completed || upgradeStatus.step === 'rolled_back') ? '100%' :
-                                    upgradeStatus.step === 'starting' ? '5%' :
-                                    upgradeStatus.step === 'checking' ? '10%' :
-                                    upgradeStatus.step === 'pulling' ? '25%' :
-                                    upgradeStatus.step === 'building' ? '50%' :
-                                    upgradeStatus.step === 'restarting' ? '75%' :
-                                    upgradeStatus.step === 'verifying' ? '90%' :
-                                    upgradeStatus.step === 'rolling_back' ? '50%' : '15%'
-                                }}
-                              />
+                            <div className="mt-3">
+                              <div className={`h-2 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${(upgradeStatus.completed || upgradeStatus.step === 'rolled_back') ? 'bg-green-500' : upgradeStatus.step === 'rolling_back' ? 'bg-amber-500' : 'bg-blue-500'}`}
+                                  style={{
+                                    width: (upgradeStatus.completed || upgradeStatus.step === 'rolled_back') ? '100%' :
+                                      upgradeStatus.step === 'starting' ? '5%' :
+                                      upgradeStatus.step === 'checking' ? '15%' :
+                                      upgradeStatus.step === 'pulling' ? '30%' :
+                                      upgradeStatus.step === 'building' ? '60%' :
+                                      upgradeStatus.step === 'restarting' ? '80%' :
+                                      upgradeStatus.step === 'verifying' ? '95%' :
+                                      upgradeStatus.step === 'rolling_back' ? '50%' : '10%'
+                                  }}
+                                />
+                              </div>
+                              {/* Estimated time hint */}
+                              {!upgradeStatus.completed && upgradeStatus.step !== 'rolled_back' && (
+                                <p className={`mt-1.5 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                                  {upgradeStatus.step === 'building' ? 'Building usually takes 2-3 minutes...' :
+                                   upgradeStatus.step === 'pulling' ? 'Downloading updates...' :
+                                   upgradeStatus.step === 'restarting' ? 'Almost done...' :
+                                   upgradeStatus.step === 'verifying' ? 'Verifying the upgrade...' :
+                                   'Preparing upgrade...'}
+                                </p>
+                              )}
                             </div>
                           )}
+
+                          {/* Completion message */}
                           {(upgradeStatus.completed || upgradeStatus.step === 'rolled_back') && (
-                            <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                            <p className={`mt-2 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                               Reloading page...
                             </p>
                           )}
-                          {upgradeStatus.error && !rollingBack && (
-                            <button
-                              onClick={handleRollback}
-                              className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors"
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Rollback to Previous Version
-                            </button>
+
+                          {/* Error actions */}
+                          {upgradeStatus.error && (
+                            <div className="mt-3 flex items-center gap-2">
+                              {!rollingBack && (
+                                <button
+                                  onClick={handleRollback}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                  Rollback
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setShowUpgradeLogs(true)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${theme === 'dark' ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                              >
+                                <ScrollText className="h-3 w-3" />
+                                View Logs
+                              </button>
+                            </div>
                           )}
-                          {rollingBack && (
-                            <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                              Rolling back...
-                            </p>
+
+                          {/* View logs link during upgrade (non-error) */}
+                          {!upgradeStatus.error && !upgradeStatus.completed && upgradeStatus.step !== 'rolled_back' && (
+                            <button
+                              onClick={() => setShowUpgradeLogs(true)}
+                              className={`mt-2 flex items-center gap-1 text-xs ${theme === 'dark' ? 'text-gray-500 hover:text-gray-400' : 'text-gray-400 hover:text-gray-500'}`}
+                            >
+                              <ScrollText className="h-3 w-3" />
+                              View detailed logs
+                            </button>
                           )}
                         </div>
                       )}
-                      {updateInfo.release_notes && !upgrading && (
+
+                      {/* Release notes (when not upgrading) */}
+                      {updateInfo.release_notes && !upgrading && !showConfirmUpgrade && (
                         <div className={`mt-2 p-2 rounded-lg text-xs ${theme === 'dark' ? 'bg-gray-900 text-gray-400' : 'bg-white text-gray-600'}`}>
                           <p className="font-medium mb-1">What's new:</p>
                           <div className="prose prose-xs prose-gray dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:my-1 [&_li]:my-0 [&_p]:my-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 line-clamp-6">
@@ -2310,6 +2424,37 @@ function SettingsModal({
                               View full release notes <ExternalLink className="h-3 w-3" />
                             </a>
                           )}
+                        </div>
+                      )}
+
+                      {/* Confirmation dialog */}
+                      {showConfirmUpgrade && (
+                        <div className={`mt-3 p-3 rounded-lg border ${theme === 'dark' ? 'bg-gray-900 border-blue-800/50' : 'bg-blue-50 border-blue-200'}`}>
+                          <div className="flex items-start gap-2 mb-3">
+                            <AlertCircle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
+                            <div>
+                              <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
+                                Upgrade to v{updateInfo.latest_version}?
+                              </p>
+                              <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                This will restart Homeport services. The upgrade typically takes 3-4 minutes. Your repositories and data will not be affected.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setShowConfirmUpgrade(false)}
+                              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${theme === 'dark' ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'}`}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleStartUpgrade}
+                              className="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                            >
+                              Start Upgrade
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2370,6 +2515,51 @@ function SettingsModal({
           </div>
         </div>
       </div>
+
+      {/* Upgrade Logs Modal */}
+      {showUpgradeLogs && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] px-4" onClick={() => setShowUpgradeLogs(false)}>
+          <div
+            className={`rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`p-4 border-b flex items-center justify-between ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+              <div className="flex items-center gap-2">
+                <ScrollText className={`h-4 w-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} />
+                <h3 className={`font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Upgrade Logs</h3>
+              </div>
+              <button
+                onClick={() => setShowUpgradeLogs(false)}
+                className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className={`p-4 overflow-auto max-h-[60vh] ${theme === 'dark' ? 'bg-gray-950' : 'bg-gray-50'}`}>
+              {upgradeLogs ? (
+                <pre className={`text-xs font-mono whitespace-pre-wrap break-words ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {upgradeLogs}
+                </pre>
+              ) : (
+                <p className={`text-sm ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                  No logs available yet...
+                </p>
+              )}
+            </div>
+            <div className={`p-3 border-t flex items-center justify-between ${theme === 'dark' ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
+              <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                {upgrading ? 'Auto-refreshing every 2s' : 'Log file location: /srv/homeport/data/upgrade.log'}
+              </span>
+              <button
+                onClick={() => setShowUpgradeLogs(false)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg ${theme === 'dark' ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

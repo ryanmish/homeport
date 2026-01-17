@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gethomeport/homeport/internal/version"
@@ -14,11 +15,16 @@ import (
 
 // UpgradeStatus represents the current state of an upgrade operation
 type UpgradeStatus struct {
-	Step      string `json:"step"`      // "idle", "starting", "checking", "pulling", "building", "restarting", "verifying", "complete", "rolling_back", "rolled_back", "error"
-	Message   string `json:"message"`   // Human-readable status message
-	Error     bool   `json:"error"`     // Whether an error occurred
-	Completed bool   `json:"completed"` // Whether the upgrade is complete
-	Version   string `json:"version"`   // Target version being upgraded to
+	Step       string `json:"step"`       // "idle", "starting", "checking", "pulling", "building", "restarting", "verifying", "complete", "rolling_back", "rolled_back", "error"
+	Message    string `json:"message"`    // Human-readable status message
+	Error      bool   `json:"error"`      // Whether an error occurred
+	Completed  bool   `json:"completed"`  // Whether the upgrade is complete
+	Version    string `json:"version"`    // Target version being upgraded to
+	Progress   int    `json:"progress"`   // Progress percentage (0-100)
+	StepNumber int    `json:"stepNumber"` // Current step number (1-5)
+	TotalSteps int    `json:"totalSteps"` // Total number of steps (5)
+	StartedAt  int64  `json:"startedAt"`  // Unix timestamp when upgrade started
+	Duration   int64  `json:"duration"`   // Seconds since upgrade started
 }
 
 // handleStartUpgrade triggers the upgrade process
@@ -170,10 +176,15 @@ func (s *Server) handleUpgradeStatus(w http.ResponseWriter, r *http.Request) {
 		if os.IsNotExist(err) {
 			// No upgrade in progress
 			jsonResponse(w, http.StatusOK, UpgradeStatus{
-				Step:      "idle",
-				Message:   "No upgrade in progress",
-				Error:     false,
-				Completed: false,
+				Step:       "idle",
+				Message:    "No upgrade in progress",
+				Error:      false,
+				Completed:  false,
+				Progress:   0,
+				StepNumber: 0,
+				TotalSteps: 5,
+				StartedAt:  0,
+				Duration:   0,
 			})
 			return
 		}
@@ -187,7 +198,49 @@ func (s *Server) handleUpgradeStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default TotalSteps for backward compatibility with old status files
+	if status.TotalSteps == 0 {
+		status.TotalSteps = 5
+	}
+
 	jsonResponse(w, http.StatusOK, status)
+}
+
+// handleUpgradeLogs returns the contents of the upgrade log file
+// GET /api/upgrade/logs
+// Optional query parameter: lines=N (returns last N lines, default all)
+func (s *Server) handleUpgradeLogs(w http.ResponseWriter, r *http.Request) {
+	logFile := filepath.Join(s.cfg.DataDir, "upgrade.log")
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No log file yet
+			jsonResponse(w, http.StatusOK, map[string]string{
+				"logs": "",
+			})
+			return
+		}
+		errorResponse(w, http.StatusInternalServerError, "Failed to read upgrade logs")
+		return
+	}
+
+	logs := string(data)
+
+	// Check if client requested last N lines
+	if linesParam := r.URL.Query().Get("lines"); linesParam != "" {
+		if n, err := strconv.Atoi(linesParam); err == nil && n > 0 {
+			lines := strings.Split(logs, "\n")
+			if len(lines) > n {
+				lines = lines[len(lines)-n:]
+			}
+			logs = strings.Join(lines, "\n")
+		}
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]string{
+		"logs": logs,
+	})
 }
 
 // CheckUpgradeCompletion should be called on server startup to handle
@@ -231,6 +284,7 @@ func CheckUpgradeCompletion(dataDir string) {
 		status.Message = "Upgrade failed. Rolled back to previous version."
 		status.Completed = false
 		status.Error = true
+		status.Progress = 100
 	} else if currentNorm == targetNorm || targetVersion == "latest" {
 		// Upgrade succeeded - update status
 		log.Printf("Upgrade completed successfully (now running %s)", currentVersion)
@@ -238,6 +292,7 @@ func CheckUpgradeCompletion(dataDir string) {
 		status.Message = "Upgrade complete!"
 		status.Completed = true
 		status.Error = false
+		status.Progress = 100
 	} else {
 		// Upgrade may have failed - report error
 		log.Printf("Upgrade may have failed (expected %s, running %s)", targetVersion, currentVersion)
@@ -245,6 +300,7 @@ func CheckUpgradeCompletion(dataDir string) {
 		status.Message = "Upgrade interrupted. Please try again."
 		status.Error = true
 		status.Completed = false
+		status.Progress = 100
 	}
 
 	// Write updated status

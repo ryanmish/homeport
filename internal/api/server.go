@@ -149,6 +149,7 @@ func (s *Server) setupRouter() {
 			// Upgrade endpoints
 			r.Post("/upgrade", s.handleStartUpgrade)
 			r.Get("/upgrade/status", s.handleUpgradeStatus)
+			r.Get("/upgrade/logs", s.handleUpgradeLogs)
 			r.Post("/rollback", s.handleRollback)
 
 			// Auth management endpoints
