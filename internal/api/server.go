@@ -156,6 +156,7 @@ func (s *Server) setupRouter() {
 			r.Post("/auth/change-password", s.handleChangePassword)
 
 			// Terminal session management (flat routes to avoid chi nesting issues)
+			r.Get("/terminal/sessions", s.handleAllTerminalSessions) // List all sessions
 			r.Get("/terminal/{repoId}/sessions", s.handleTerminalSessions)
 			r.Post("/terminal/{repoId}/sessions", s.handleCreateTerminalSession)
 			r.Delete("/terminal/sessions/{sessionId}", s.handleDeleteTerminalSession)

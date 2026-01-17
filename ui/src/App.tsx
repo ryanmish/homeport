@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ShareMenu } from '@/components/ShareMenu'
 import { Button } from '@/components/ui/button'
 import { Toaster, toast } from '@/components/ui/sonner'
-import { api, type Repo, type Port, type Status, type GitHubRepo, type GitStatus, type RepoInfo, type BranchInfo, type UpdateInfo, type UpgradeStatus, type Process, type LogEntry, type ActivityEntry } from '@/lib/api'
+import { api, type Repo, type Port, type Status, type GitHubRepo, type GitStatus, type RepoInfo, type BranchInfo, type UpdateInfo, type UpgradeStatus, type Process, type LogEntry, type ActivityEntry, type TerminalSession } from '@/lib/api'
 import {
   ExternalLink,
   Copy,
@@ -92,6 +92,7 @@ function App() {
   const [showLogsModal, setShowLogsModal] = useState<Repo | null>(null)
   const [showCommitModal, setShowCommitModal] = useState<Repo | null>(null)
   const [activity, setActivity] = useState<ActivityEntry[]>([])
+  const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([])
   const [showActivityPanel, setShowActivityPanel] = useState(false)
   const [favorites, setFavorites] = useState<Set<string>>(() => {
     const saved = localStorage.getItem('homeport_favorites')
@@ -166,6 +167,14 @@ function App() {
         setActivity(activityData)
       } catch {
         // Ignore activity fetch errors
+      }
+
+      // Fetch terminal sessions
+      try {
+        const sessionsData = await api.getTerminalSessions()
+        setTerminalSessions(sessionsData)
+      } catch {
+        // Ignore terminal sessions fetch errors
       }
     } catch (err) {
       console.error('Failed to fetch data:', err)
@@ -741,6 +750,36 @@ function App() {
               </section>
             )
           })()}
+
+          {/* Terminal Sessions */}
+          {terminalSessions.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <h2 className={`text-sm sm:text-base font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
+                  Terminal Sessions
+                </h2>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${theme === 'dark' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                  {terminalSessions.length} active
+                </span>
+              </div>
+              <Card className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'border-gray-200'}`}>
+                <CardContent className="pt-4 space-y-1">
+                  {terminalSessions.map((session) => (
+                    <TerminalSessionRow
+                      key={session.id}
+                      session={session}
+                      theme={theme}
+                      onClose={async () => {
+                        await api.deleteTerminalSession(session.id)
+                        setTerminalSessions(prev => prev.filter(s => s.id !== session.id))
+                        toast.success('Terminal session closed')
+                      }}
+                    />
+                  ))}
+                </CardContent>
+              </Card>
+            </section>
+          )}
           </div>
         </main>
 
@@ -1584,6 +1623,64 @@ function ExternalPortRow({ port, theme }: { port: Port; theme: Theme }) {
       <span className={`text-xs ${theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}`}>
         External
       </span>
+    </div>
+  )
+}
+
+function TerminalSessionRow({
+  session,
+  theme,
+  onClose,
+}: {
+  session: TerminalSession
+  theme: Theme
+  onClose: () => void
+}) {
+  const lastUsed = new Date(session.last_used * 1000)
+  const now = new Date()
+  const diffMs = now.getTime() - lastUsed.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const lastUsedText = diffMins < 1 ? 'just now' : diffMins < 60 ? `${diffMins}m ago` : `${Math.floor(diffMins / 60)}h ago`
+
+  return (
+    <div className={`flex items-center justify-between py-2 px-3 rounded-lg ${theme === 'dark' ? 'bg-gray-800/30 hover:bg-gray-800/50' : 'bg-gray-100/50 hover:bg-gray-100'} transition-colors`}>
+      <a
+        href={`/terminal/${session.repo_id}?session=${session.id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 flex-1 min-w-0"
+      >
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 bg-emerald-500`} />
+        <div className="flex flex-col min-w-0">
+          <span className={`text-sm font-medium truncate ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
+            {session.title || session.repo_name}
+          </span>
+          <span className={`text-xs truncate ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+            {session.repo_name} · {lastUsedText}
+          </span>
+        </div>
+      </a>
+      <div className="flex items-center gap-2 ml-2">
+        <a
+          href={`/terminal/${session.repo_id}?session=${session.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`p-1.5 rounded-md transition-colors ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'}`}
+          title="Open terminal"
+        >
+          <Terminal className="h-4 w-4" />
+        </a>
+        <button
+          onClick={(e) => {
+            e.preventDefault()
+            onClose()
+          }}
+          className={`p-1.5 rounded-md transition-colors ${theme === 'dark' ? 'hover:bg-red-900/30 text-gray-400 hover:text-red-400' : 'hover:bg-red-50 text-gray-500 hover:text-red-600'}`}
+          title="Close session"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   )
 }

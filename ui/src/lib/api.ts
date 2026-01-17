@@ -150,6 +150,15 @@ export interface ActivityEntry {
   details?: string
 }
 
+export interface TerminalSession {
+  id: string
+  repo_id: string
+  repo_name: string
+  title?: string
+  created_at: number
+  last_used: number
+}
+
 // API functions
 
 const API_BASE = '/api'
@@ -307,4 +316,11 @@ export const api = {
 
   logout: () =>
     fetch('/logout', { method: 'GET', redirect: 'follow' }),
+
+  // Terminal sessions
+  getTerminalSessions: () =>
+    fetchJSON<TerminalSession[]>('/terminal/sessions'),
+
+  deleteTerminalSession: (sessionId: string) =>
+    fetch(API_BASE + `/terminal/sessions/${sessionId}`, { method: 'DELETE' }),
 }

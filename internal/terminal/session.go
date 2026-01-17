@@ -186,6 +186,20 @@ func (m *Manager) ListSessions(repoID string) []*Session {
 	return sessions
 }
 
+// ListAllSessions returns all active sessions across all repos
+func (m *Manager) ListAllSessions() []*Session {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var sessions []*Session
+	for _, s := range m.sessions {
+		if !s.closed {
+			sessions = append(sessions, s)
+		}
+	}
+	return sessions
+}
+
 // DeleteSession closes and removes a session
 func (m *Manager) DeleteSession(id string) {
 	m.mu.Lock()

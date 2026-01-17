@@ -61,6 +61,48 @@ func (s *Server) handleTerminalSessions(w http.ResponseWriter, r *http.Request) 
 	jsonResponse(w, http.StatusOK, result)
 }
 
+// handleAllTerminalSessions lists all active terminal sessions across all repos
+func (s *Server) handleAllTerminalSessions(w http.ResponseWriter, r *http.Request) {
+	sessions := s.termMgr.ListAllSessions()
+
+	type sessionInfo struct {
+		ID        string `json:"id"`
+		RepoID    string `json:"repo_id"`
+		RepoName  string `json:"repo_name"`
+		Title     string `json:"title,omitempty"`
+		CreatedAt int64  `json:"created_at"`
+		LastUsed  int64  `json:"last_used"`
+	}
+
+	var result []sessionInfo
+	for _, sess := range sessions {
+		// Look up repo name
+		repoName := sess.RepoID
+		if sess.RepoID != "_system" {
+			if repo, err := s.store.GetRepo(sess.RepoID); err == nil {
+				repoName = repo.Name
+			}
+		} else {
+			repoName = "System"
+		}
+
+		result = append(result, sessionInfo{
+			ID:        sess.ID,
+			RepoID:    sess.RepoID,
+			RepoName:  repoName,
+			Title:     sess.GetTitle(),
+			CreatedAt: sess.CreatedAt.Unix(),
+			LastUsed:  sess.LastUsed.Unix(),
+		})
+	}
+
+	if result == nil {
+		result = []sessionInfo{}
+	}
+
+	jsonResponse(w, http.StatusOK, result)
+}
+
 // handleCreateTerminalSession creates a new terminal session
 func (s *Server) handleCreateTerminalSession(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "repoId")
