@@ -13,6 +13,14 @@ if [ -d /home/homeport/.config ]; then
     chown homeport:homeport /home/homeport/.config
 fi
 
+# Fix gh config directory and files ownership (mounted from host with different uid)
+if [ -d /home/homeport/.config/gh ]; then
+    chown -R homeport:homeport /home/homeport/.config/gh
+    chmod 755 /home/homeport/.config/gh
+    # Make config files writable so gh auth login can update them
+    find /home/homeport/.config/gh -type f -exec chmod 644 {} \; 2>/dev/null || true
+fi
+
 # Add homeport user to docker group (for self-upgrade capability)
 # Get the GID of the docker socket and create/modify group to match
 if [ -S /var/run/docker.sock ]; then
