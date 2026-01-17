@@ -478,7 +478,7 @@ function App() {
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      <div className={`min-h-screen transition-colors duration-200 ${theme === 'dark' ? 'dark bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
+      <div className={`mobile-app-container transition-colors duration-200 ${theme === 'dark' ? 'dark bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
         {/* Toast notifications */}
         <Toaster position="top-right" />
 
@@ -544,10 +544,11 @@ function App() {
               </button>
 
               {/* Icon buttons */}
-              <div className={`flex items-center border-r pr-2 mr-2 ${theme === 'dark' ? 'border-gray-800' : 'border-gray-200'}`}>
+              <div className={`flex items-center sm:border-r sm:pr-2 sm:mr-2 ${theme === 'dark' ? 'border-gray-800' : 'border-gray-200'}`}>
+                {/* Terminal - hidden on mobile, in bottom bar */}
                 <button
                   onClick={() => window.open('/terminal/_system', '_blank')}
-                  className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                  className={`hidden sm:block p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
                   title="System Terminal"
                 >
                   <Terminal className="h-4 w-4" />
@@ -566,9 +567,10 @@ function App() {
                 >
                   {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </button>
+                {/* Settings - hidden on mobile, in bottom bar */}
                 <button
                   onClick={() => setShowSettingsModal(true)}
-                  className={`relative p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                  className={`hidden sm:block relative p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'}`}
                   title={updateInfo?.update_available ? `Update available: v${updateInfo.latest_version}` : 'Settings'}
                 >
                   <Settings className="h-4 w-4" />
@@ -578,11 +580,11 @@ function App() {
                 </button>
               </div>
 
-              {/* Primary actions */}
-              <div className="flex items-center gap-1.5">
+              {/* Primary actions - hidden on mobile, in bottom bar */}
+              <div className="hidden sm:flex items-center gap-1.5">
                 <Button variant="outline" size="sm" onClick={() => setShowNewRepoModal(true)}>
-                  <Plus className="h-4 w-4 sm:mr-1.5" />
-                  <span className="hidden sm:inline">New</span>
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  <span>New</span>
                 </Button>
                 <Button
                   size="sm"
@@ -590,15 +592,16 @@ function App() {
                   disabled={githubAuthenticated === false}
                   title={githubAuthenticated === false ? 'Connect GitHub in Settings first' : undefined}
                 >
-                  <Github className="h-4 w-4 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Clone</span>
+                  <Github className="h-4 w-4 mr-1.5" />
+                  <span>Clone</span>
                 </Button>
               </div>
             </div>
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
+        <main className="mobile-main-scroll">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 pb-20 sm:pb-8 space-y-6 sm:space-y-8">
           {/* System Stats */}
           <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <StatCard
@@ -738,7 +741,53 @@ function App() {
               </section>
             )
           })()}
+          </div>
         </main>
+
+        {/* Mobile Bottom Toolbar */}
+        <nav className={`sm:hidden fixed bottom-0 left-0 right-0 z-40 border-t safe-area-bottom ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+          <div className="flex items-center justify-around h-14 px-2">
+            <button
+              onClick={() => setShowCommandPalette(true)}
+              className={`flex flex-col items-center justify-center flex-1 py-2 ${theme === 'dark' ? 'text-gray-400 active:text-gray-200 active:bg-gray-800' : 'text-gray-500 active:text-gray-700 active:bg-gray-100'} rounded-lg transition-colors`}
+            >
+              <Search className="h-5 w-5" />
+              <span className="text-[10px] mt-0.5">Search</span>
+            </button>
+            <button
+              onClick={() => setShowNewRepoModal(true)}
+              className={`flex flex-col items-center justify-center flex-1 py-2 ${theme === 'dark' ? 'text-gray-400 active:text-gray-200 active:bg-gray-800' : 'text-gray-500 active:text-gray-700 active:bg-gray-100'} rounded-lg transition-colors`}
+            >
+              <Plus className="h-5 w-5" />
+              <span className="text-[10px] mt-0.5">New</span>
+            </button>
+            <button
+              onClick={() => setShowCloneModal(true)}
+              disabled={githubAuthenticated === false}
+              className={`flex flex-col items-center justify-center flex-1 py-2 ${githubAuthenticated === false ? 'opacity-40' : ''} ${theme === 'dark' ? 'text-gray-400 active:text-gray-200 active:bg-gray-800' : 'text-gray-500 active:text-gray-700 active:bg-gray-100'} rounded-lg transition-colors`}
+            >
+              <Github className="h-5 w-5" />
+              <span className="text-[10px] mt-0.5">Clone</span>
+            </button>
+            <button
+              onClick={() => window.open('/terminal/_system', '_blank')}
+              className={`flex flex-col items-center justify-center flex-1 py-2 ${theme === 'dark' ? 'text-gray-400 active:text-gray-200 active:bg-gray-800' : 'text-gray-500 active:text-gray-700 active:bg-gray-100'} rounded-lg transition-colors`}
+            >
+              <Terminal className="h-5 w-5" />
+              <span className="text-[10px] mt-0.5">Terminal</span>
+            </button>
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className={`relative flex flex-col items-center justify-center flex-1 py-2 ${theme === 'dark' ? 'text-gray-400 active:text-gray-200 active:bg-gray-800' : 'text-gray-500 active:text-gray-700 active:bg-gray-100'} rounded-lg transition-colors`}
+            >
+              <Settings className="h-5 w-5" />
+              <span className="text-[10px] mt-0.5">Settings</span>
+              {updateInfo?.update_available && (
+                <span className="absolute top-1 right-1/4 h-2 w-2 bg-blue-500 rounded-full" />
+              )}
+            </button>
+          </div>
+        </nav>
 
         {/* Modals */}
         {showCloneModal && (
@@ -836,19 +885,19 @@ function App() {
           <div className="fixed inset-0 z-50" onClick={() => setShowActivityPanel(false)}>
             <div className="absolute inset-0 bg-black/20" />
             <div
-              className={`absolute right-0 top-0 h-full w-80 shadow-2xl border-l overflow-hidden animate-in slide-in-from-right duration-200 ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
+              className={`absolute right-0 top-0 h-full w-full sm:w-80 shadow-2xl sm:border-l overflow-hidden animate-in slide-in-from-right duration-200 ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className={`p-4 border-b flex items-center justify-between ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+              <div className={`safe-area-top p-4 border-b flex items-center justify-between ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
                 <h2 className={`font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Activity</h2>
                 <button
                   onClick={() => setShowActivityPanel(false)}
-                  className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
+                  className={`p-2 -mr-2 rounded-md ${theme === 'dark' ? 'hover:bg-gray-800 active:bg-gray-700' : 'hover:bg-gray-100 active:bg-gray-200'}`}
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="overflow-y-auto h-full pb-20">
+              <div className="overflow-y-auto h-full pb-24 sm:pb-20">
                 {activity.length === 0 ? (
                   <div className={`p-4 text-center text-sm ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                     No activity yet
